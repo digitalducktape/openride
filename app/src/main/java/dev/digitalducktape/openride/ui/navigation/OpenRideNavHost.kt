@@ -2,9 +2,11 @@ package dev.digitalducktape.openride.ui.navigation
 
 import androidx.compose.runtime.Composable
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import dev.digitalducktape.openride.AppContainer
 import dev.digitalducktape.openride.viewModelFactory
 import dev.digitalducktape.openride.ui.main.MainScaffold
@@ -14,6 +16,8 @@ import dev.digitalducktape.openride.ui.profile.ProfileSelectScreen
 import dev.digitalducktape.openride.ui.profile.ProfileSelectViewModel
 import dev.digitalducktape.openride.ui.ride.InRideScreen
 import dev.digitalducktape.openride.ui.ride.InRideViewModel
+import dev.digitalducktape.openride.ui.ride.RideSummaryScreen
+import dev.digitalducktape.openride.ui.ride.RideSummaryViewModel
 
 /**
  * The app's single outer [androidx.navigation.NavHost] (T11). Start destination is profile
@@ -66,11 +70,35 @@ fun OpenRideNavHost(appContainer: AppContainer) {
 
         composable(Destinations.InRide) {
             val viewModel: InRideViewModel = viewModel(
-                factory = viewModelFactory { InRideViewModel(appContainer.rideSessionManager) },
+                factory = viewModelFactory {
+                    InRideViewModel(appContainer.rideSessionManager, appContainer.bikeDataSource)
+                },
             )
             InRideScreen(
                 viewModel = viewModel,
-                onRideEnded = { navController.popBackStack() },
+                onRideEnded = { rideId ->
+                    navController.navigate(Destinations.rideSummary(rideId)) {
+                        popUpTo(Destinations.Main) { inclusive = false }
+                        launchSingleTop = true
+                    }
+                },
+            )
+        }
+
+        composable(
+            route = Destinations.RideSummary,
+            arguments = listOf(navArgument(Destinations.RideIdArg) { type = NavType.LongType }),
+        ) { backStackEntry ->
+            val rideId = backStackEntry.arguments?.getLong(Destinations.RideIdArg) ?: 0L
+            val viewModel: RideSummaryViewModel = viewModel(
+                key = "ride_summary_$rideId",
+                factory = viewModelFactory {
+                    RideSummaryViewModel(appContainer.rideRepository, appContainer.rideSessionManager, rideId)
+                },
+            )
+            RideSummaryScreen(
+                viewModel = viewModel,
+                onDismiss = { navController.popBackStack() },
             )
         }
     }
