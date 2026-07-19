@@ -174,6 +174,47 @@ class RideSummaryViewModelTest {
         assertTrue(viewModel.ftpApplied.value)
     }
 
+    // --- Export (T14/#14) ---------------------------------------------------------------------
+
+    @Test
+    fun `tcxContent and sampleCsvContent are null before load`() = runTest {
+        val manager = RideSessionManager(FakeBikeDataSource(), rideRepository, backgroundScope) { 0L }
+        manager.start(profileId)
+        advanceTimeBy(1_000)
+        runCurrent()
+        val ride = manager.stop()
+        requireNotNull(ride)
+
+        val viewModel = RideSummaryViewModel(rideRepository, profileRepository, manager, ride.id)
+
+        assertEquals(null, viewModel.tcxContent())
+        assertEquals(null, viewModel.sampleCsvContent())
+    }
+
+    @Test
+    fun `tcxContent and sampleCsvContent reflect the loaded ride and samples`() = runTest {
+        val fakeBikeDataSource = FakeBikeDataSource()
+        val manager = RideSessionManager(fakeBikeDataSource, rideRepository, backgroundScope) { 0L }
+        manager.start(profileId)
+        fakeBikeDataSource.setMetrics(cadenceRpm = 90, resistancePercent = 50, powerWatts = 200)
+        advanceTimeBy(2_000)
+        runCurrent()
+        val ride = manager.stop()
+        requireNotNull(ride)
+
+        val viewModel = RideSummaryViewModel(rideRepository, profileRepository, manager, ride.id)
+        viewModel.load()
+
+        val tcx = viewModel.tcxContent()
+        requireNotNull(tcx)
+        assertTrue(tcx.contains("TrainingCenterDatabase"))
+        assertTrue(tcx.contains("<Watts>200</Watts>"))
+
+        val csv = viewModel.sampleCsvContent()
+        requireNotNull(csv)
+        assertEquals("t_sec,cadence,resistance,power\n0,90,50,200\n1,90,50,200\n", csv)
+    }
+
     @Test
     fun `applySuggestedFtp is a no-op when the ride is too short to have a suggestion`() = runTest {
         val manager = RideSessionManager(FakeBikeDataSource(), rideRepository, backgroundScope) { 0L }

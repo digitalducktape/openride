@@ -5,6 +5,8 @@ import dev.digitalducktape.openride.core.data.ProfileRepository
 import dev.digitalducktape.openride.core.data.Ride
 import dev.digitalducktape.openride.core.data.RideRepository
 import dev.digitalducktape.openride.core.data.RideSample
+import dev.digitalducktape.openride.core.export.CsvExporter
+import dev.digitalducktape.openride.core.export.TcxExporter
 import dev.digitalducktape.openride.core.ride.FtpEstimator
 import dev.digitalducktape.openride.core.ride.RideSessionManager
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -59,6 +61,17 @@ class RideSummaryViewModel(
         profileRepository.updateProfile(profile.copy(ftp = ftp))
         _ftpApplied.value = true
     }
+
+    /**
+     * TCX export (PRD P1-1) for the loaded ride, or `null` before [load] has populated
+     * [ride]/[samples]. Pure/synchronous — the data is already in memory once loaded, so this
+     * needs no suspend round-trip; the UI layer writes it to a file and shares it (see
+     * [dev.digitalducktape.openride.ui.common.ExportShare]).
+     */
+    fun tcxContent(): String? = _ride.value?.let { r -> TcxExporter.export(r, _samples.value) }
+
+    /** Per-second sample CSV (bonus alongside PRD P1-2's history CSV) for the loaded ride. */
+    fun sampleCsvContent(): String? = _ride.value?.let { CsvExporter.exportRideSamples(_samples.value) }
 
     /**
      * Returns to [dev.digitalducktape.openride.core.ride.RideSessionState.Idle] if it was

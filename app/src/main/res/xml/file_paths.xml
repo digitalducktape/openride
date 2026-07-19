@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Backs the FileProvider used by ExportShare.kt (PRD P1-1/P1-2): only the app's own
+     cache/exports subdirectory is exposed, nothing else under cacheDir or filesDir. -->
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <cache-path name="exports" path="exports/" />
+</paths>
