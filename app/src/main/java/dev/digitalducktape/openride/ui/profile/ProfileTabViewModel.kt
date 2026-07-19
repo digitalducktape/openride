@@ -8,9 +8,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 
 /**
- * Profile nav tab: shows the active rider. "Switch rider" (T6) hangs off this same view
- * model — [ActiveProfileHolder.clear] is exposed here so T6 only needs to wire up the
- * button + navigation, not new state plumbing.
+ * Profile nav tab: shows the active rider and offers "Switch rider" (P0-3: "switch rider"
+ * reachable from the Profile tab).
  */
 class ProfileTabViewModel(
     private val activeProfileHolder: ActiveProfileHolder,
@@ -20,4 +19,9 @@ class ProfileTabViewModel(
         combine(activeProfileHolder.activeProfileId, profileRepository.observeProfiles()) { id, profiles ->
             profiles.firstOrNull { it.id == id }
         }
+
+    /** Clears the active profile so the caller can navigate back to profile select. */
+    fun switchRider() {
+        activeProfileHolder.clear()
+    }
 }
