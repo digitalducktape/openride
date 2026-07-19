@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
@@ -27,8 +26,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
- * Home tab (PRD P0-7): greeting with the active rider, a prominent Quick Start button, and a
- * placeholder for the curated-classes rows that land in T10.
+ * Home tab (PRD P0-7): greeting with the active rider and a prominent Quick Start button.
+ * The curated-classes browser (PRD P0-6) lives in the Classes tab (T10) rather than
+ * duplicated here — see [dev.digitalducktape.openride.ui.classes.ClassesScreen].
  */
 @Composable
 fun HomeScreen(
@@ -76,31 +76,6 @@ fun HomeScreen(
                     fontWeight = FontWeight.Bold,
                 )
             }
-
-            ClassesPlaceholderSection(modifier = Modifier.padding(top = 40.dp))
         }
-    }
-}
-
-/**
- * Marks where the curated-classes rows (YouTube RSS channels, per-channel video rows) will
- * render once T9/T10 land. Deliberately just a labelled placeholder — no fake content.
- */
-@Composable
-private fun ClassesPlaceholderSection(modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(
-                color = MaterialTheme.colorScheme.surface,
-                shape = RoundedCornerShape(16.dp),
-            )
-            .padding(24.dp),
-    ) {
-        Text(
-            text = "Classes — coming soon (T10)",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }
