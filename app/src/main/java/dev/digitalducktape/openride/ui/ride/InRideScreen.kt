@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -25,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.digitalducktape.openride.core.ride.RideGoal
 import dev.digitalducktape.openride.ui.common.TimeFormat
 import dev.digitalducktape.openride.ui.theme.MetricTextStyles
 import dev.digitalducktape.openride.ui.theme.OpenRideColors
@@ -93,6 +95,23 @@ fun InRideScreen(
                         avgValue = "${uiState.aggregates.avgPower}",
                         maxValue = "${uiState.aggregates.maxPower}",
                         modifier = Modifier.weight(1f),
+                    )
+                    MetricTile(
+                        label = "ZONE",
+                        currentValue = uiState.currentZone?.let { "Z${it.number}" } ?: dash,
+                        avgValue = uiState.currentZone?.label ?: (if (uiState.ftp == null) "No FTP set" else "--"),
+                        maxValue = null,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+
+                if (uiState.goal != RideGoal.None) {
+                    GoalProgressRow(
+                        goal = uiState.goal,
+                        progress = uiState.goalProgress ?: 0.0,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 20.dp),
                     )
                 }
 
@@ -185,6 +204,40 @@ private fun SensorFailureBanner(modifier: Modifier = Modifier) {
             text = "Sensors not detected — check bike connection",
             color = OpenRideColors.Background,
             fontWeight = FontWeight.Bold,
+        )
+    }
+}
+
+/** Live progress toward the rider's pre-ride goal (PRD P1-3). */
+@Composable
+private fun GoalProgressRow(goal: RideGoal, progress: Double, modifier: Modifier = Modifier) {
+    val label = when (goal) {
+        is RideGoal.Duration -> "Goal: ${TimeFormat.elapsed(goal.targetSec)}"
+        is RideGoal.Output -> "Goal: %.0f kJ".format(goal.targetKj)
+        RideGoal.None -> ""
+    }
+    Column(modifier = modifier) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = label,
+                style = MetricTextStyles.TileLabel,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = "${(progress * 100).toInt()}%",
+                style = MetricTextStyles.TileLabel,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        LinearProgressIndicator(
+            progress = { progress.toFloat() },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 6.dp),
+            color = MaterialTheme.colorScheme.primary,
         )
     }
 }

@@ -50,6 +50,10 @@ class RideSessionManager(
     private val _liveAggregates = MutableStateFlow(LiveAggregates())
     val liveAggregates: StateFlow<LiveAggregates> = _liveAggregates.asStateFlow()
 
+    private val _goal = MutableStateFlow<RideGoal>(RideGoal.None)
+    /** The rider's pre-ride target (PRD P1-3), if any. Set via [setGoal] before [start]. */
+    val goal: StateFlow<RideGoal> = _goal.asStateFlow()
+
     /**
      * `true` only while [RideSessionState.Active] — a UI-agnostic signal the activity maps
      * to `FLAG_KEEP_SCREEN_ON` (PRD P0-10). Deliberately `false` while
@@ -88,6 +92,16 @@ class RideSessionManager(
         _state.value = RideSessionState.Active
         _isRideActive.value = true
         startTicker()
+    }
+
+    /**
+     * Sets the rider's pre-ride goal (PRD P1-3). Only takes effect while
+     * [RideSessionState.Idle] — a goal is a pre-ride decision, not something that changes
+     * mid-ride — so this is a no-op once [start] has moved past Idle.
+     */
+    fun setGoal(goal: RideGoal) {
+        if (_state.value != RideSessionState.Idle) return
+        _goal.value = goal
     }
 
     /** Pauses timer/sampling. No-op if not currently [RideSessionState.Active]. */
@@ -156,6 +170,7 @@ class RideSessionManager(
         _elapsedSec.value = 0
         _liveAggregates.value = LiveAggregates()
         sampleBuffer.clear()
+        _goal.value = RideGoal.None
         _state.value = RideSessionState.Idle
     }
 

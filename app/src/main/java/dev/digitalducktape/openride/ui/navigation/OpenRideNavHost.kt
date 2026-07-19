@@ -71,7 +71,12 @@ fun OpenRideNavHost(appContainer: AppContainer) {
         composable(Destinations.InRide) {
             val viewModel: InRideViewModel = viewModel(
                 factory = viewModelFactory {
-                    InRideViewModel(appContainer.rideSessionManager, appContainer.bikeDataSource)
+                    InRideViewModel(
+                        appContainer.rideSessionManager,
+                        appContainer.bikeDataSource,
+                        appContainer.profileRepository,
+                        appContainer.activeProfileHolder,
+                    )
                 },
             )
             InRideScreen(
@@ -93,7 +98,12 @@ fun OpenRideNavHost(appContainer: AppContainer) {
             val viewModel: RideSummaryViewModel = viewModel(
                 key = "ride_summary_$rideId",
                 factory = viewModelFactory {
-                    RideSummaryViewModel(appContainer.rideRepository, appContainer.rideSessionManager, rideId)
+                    RideSummaryViewModel(
+                        appContainer.rideRepository,
+                        appContainer.profileRepository,
+                        appContainer.rideSessionManager,
+                        rideId,
+                    )
                 },
             )
             RideSummaryScreen(
