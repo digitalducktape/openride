@@ -20,6 +20,7 @@ import dev.digitalducktape.openride.AppContainer
 import dev.digitalducktape.openride.viewModelFactory
 import dev.digitalducktape.openride.ui.classes.ClassesScreen
 import dev.digitalducktape.openride.ui.history.HistoryScreen
+import dev.digitalducktape.openride.ui.history.HistoryViewModel
 import dev.digitalducktape.openride.ui.home.HomeScreen
 import dev.digitalducktape.openride.ui.home.HomeViewModel
 import dev.digitalducktape.openride.ui.navigation.Destinations
@@ -102,7 +103,17 @@ fun MainScaffold(
                 ClassesScreen()
             }
             composable(MainTabs.History) {
-                HistoryScreen()
+                val viewModel: HistoryViewModel = viewModel(
+                    factory = viewModelFactory {
+                        HistoryViewModel(appContainer.activeProfileHolder, appContainer.rideRepository)
+                    },
+                )
+                HistoryScreen(
+                    viewModel = viewModel,
+                    onRideSelected = { rideId ->
+                        outerNavController.navigate(Destinations.rideSummary(rideId))
+                    },
+                )
             }
             composable(MainTabs.Profile) {
                 val viewModel: ProfileTabViewModel = viewModel(
