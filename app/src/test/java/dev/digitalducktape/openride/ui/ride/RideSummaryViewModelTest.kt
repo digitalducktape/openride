@@ -18,6 +18,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -58,6 +59,25 @@ class RideSummaryViewModelTest {
 
         assertNotNull(viewModel.ride.value)
         assertEquals(ride.id, viewModel.ride.value?.id)
+    }
+
+    @Test
+    fun `load also fetches the ride's full sample series`() = runTest {
+        val fakeBikeDataSource = FakeBikeDataSource()
+        val manager = RideSessionManager(fakeBikeDataSource, rideRepository, backgroundScope) { 0L }
+        manager.start(profileId)
+        fakeBikeDataSource.setMetrics(cadenceRpm = 90, resistancePercent = 50, powerWatts = 200)
+        advanceTimeBy(3_000)
+        runCurrent()
+        val ride = manager.stop()
+        requireNotNull(ride)
+
+        val viewModel = RideSummaryViewModel(rideRepository, manager, ride.id)
+        viewModel.load()
+
+        assertEquals(3, viewModel.samples.value.size)
+        assertEquals((0 until 3).toList(), viewModel.samples.value.map { it.tSec })
+        assertTrue(viewModel.samples.value.all { it.power == 200 })
     }
 
     @Test

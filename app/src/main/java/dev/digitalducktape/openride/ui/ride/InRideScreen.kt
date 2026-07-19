@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.digitalducktape.openride.ui.common.TimeFormat
 import dev.digitalducktape.openride.ui.theme.MetricTextStyles
 import dev.digitalducktape.openride.ui.theme.OpenRideColors
 import kotlinx.coroutines.launch
@@ -58,7 +59,7 @@ fun InRideScreen(
                     .padding(horizontal = 40.dp, vertical = 24.dp),
             ) {
                 Text(
-                    text = formatElapsed(uiState.elapsedSec),
+                    text = TimeFormat.elapsed(uiState.elapsedSec),
                     style = MetricTextStyles.TimerDisplay,
                     color = MaterialTheme.colorScheme.onBackground,
                     modifier = Modifier.fillMaxWidth(),
@@ -201,16 +202,5 @@ private fun SecondaryStat(label: String, value: String, modifier: Modifier = Mod
             style = MetricTextStyles.TileValueSecondary,
             color = MaterialTheme.colorScheme.onBackground,
         )
-    }
-}
-
-private fun formatElapsed(totalSec: Int): String {
-    val hours = totalSec / 3600
-    val minutes = (totalSec % 3600) / 60
-    val seconds = totalSec % 60
-    return if (hours > 0) {
-        "%d:%02d:%02d".format(hours, minutes, seconds)
-    } else {
-        "%02d:%02d".format(minutes, seconds)
     }
 }
