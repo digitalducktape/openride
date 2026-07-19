@@ -49,6 +49,7 @@ data class InRideUiState(
     val heartRateBpm: Int? = null,
     val heartRatePaired: Boolean = false,
     val heartRateConnectionState: ConnectionState = ConnectionState.Unavailable,
+    val autoPaused: Boolean = false,
 ) {
     val sensorsAvailable: Boolean get() = connectionState == ConnectionState.Connected
     val isPaused: Boolean get() = sessionState == RideSessionState.Paused
@@ -139,7 +140,8 @@ class InRideViewModel(
         rideSessionManager.goal,
         ftpFlow,
         heartRateFlow,
-    ) { core, goal, ftp, hr ->
+        rideSessionManager.autoPaused,
+    ) { core, goal, ftp, hr, autoPaused ->
         InRideUiState(
             elapsedSec = core.elapsedSec,
             sessionState = core.sessionState,
@@ -151,6 +153,7 @@ class InRideViewModel(
             heartRateBpm = hr.bpm,
             heartRatePaired = hr.paired,
             heartRateConnectionState = hr.state,
+            autoPaused = autoPaused,
         )
     }.scan(InRideUiState()) { previous, next ->
         // Distance has no dedicated field on BikeMetrics/RideSample (PRD only requires
