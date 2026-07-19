@@ -331,6 +331,138 @@ class RideSessionManagerTest {
         assertEquals((0 until 3).toList(), rideRepository.getSamples(secondRide.id).map { it.tSec })
     }
 
+    // --- Auto-pause / auto-resume on freewheel (T20/#20) -------------------------------------
+
+    @Test
+    fun `auto-pauses after the cadence-zero threshold once the rider has pedaled`() = runTest {
+        val manager = RideSessionManager(
+            fakeBikeDataSource, rideRepository, backgroundScope, autoPauseThresholdSec = 3,
+        ) { 0L }
+        manager.start(profileId)
+
+        // Pedal for 2 s so the "has pedaled this stretch" gate is satisfied.
+        fakeBikeDataSource.setMetrics(cadenceRpm = 85, resistancePercent = 40, powerWatts = 150)
+        advanceTimeBy(2_000)
+        runCurrent()
+        assertEquals(RideSessionState.Active, manager.state.value)
+
+        // Coast: cadence drops to 0. After 3 consecutive zero-cadence seconds → auto-pause.
+        fakeBikeDataSource.setMetrics(cadenceRpm = 0, resistancePercent = 40, powerWatts = 0)
+        advanceTimeBy(3_000)
+        runCurrent()
+
+        assertEquals(RideSessionState.Paused, manager.state.value)
+        assertTrue(manager.autoPaused.value)
+        assertTrue(!manager.isRideActive.value)
+    }
+
+    @Test
+    fun `does not auto-pause a ride whose cadence never left zero`() = runTest {
+        val manager = RideSessionManager(
+            fakeBikeDataSource, rideRepository, backgroundScope, autoPauseThresholdSec = 3,
+        ) { 0L }
+        manager.start(profileId)
+
+        // Never pedaled (cadence stays at the default 0) — the "has pedaled" gate blocks it.
+        advanceTimeBy(10_000)
+        runCurrent()
+
+        assertEquals(RideSessionState.Active, manager.state.value)
+        assertTrue(!manager.autoPaused.value)
+    }
+
+    @Test
+    fun `auto-resumes when cadence returns after an auto-pause`() = runTest {
+        val manager = RideSessionManager(
+            fakeBikeDataSource, rideRepository, backgroundScope, autoPauseThresholdSec = 3,
+        ) { 0L }
+        manager.start(profileId)
+        fakeBikeDataSource.setMetrics(cadenceRpm = 85, resistancePercent = 40, powerWatts = 150)
+        advanceTimeBy(2_000)
+        runCurrent()
+        fakeBikeDataSource.setMetrics(cadenceRpm = 0, resistancePercent = 40, powerWatts = 0)
+        advanceTimeBy(3_000)
+        runCurrent()
+        assertEquals(RideSessionState.Paused, manager.state.value)
+        val elapsedAtPause = manager.elapsedSec.value
+
+        // Rider pedals again → the resume-watcher flips it back to Active on the next poll.
+        fakeBikeDataSource.setMetrics(cadenceRpm = 70, resistancePercent = 40, powerWatts = 120)
+        advanceTimeBy(1_000)
+        runCurrent()
+
+        assertEquals(RideSessionState.Active, manager.state.value)
+        assertTrue(!manager.autoPaused.value)
+        assertTrue(manager.isRideActive.value)
+
+        // And it keeps timing from where it auto-paused (no time lost/gained while coasting-paused).
+        advanceTimeBy(2_000)
+        runCurrent()
+        assertEquals(elapsedAtPause + 2, manager.elapsedSec.value)
+    }
+
+    @Test
+    fun `a manual pause does not auto-resume when the rider pedals`() = runTest {
+        val manager = RideSessionManager(
+            fakeBikeDataSource, rideRepository, backgroundScope, autoPauseThresholdSec = 3,
+        ) { 0L }
+        manager.start(profileId)
+        fakeBikeDataSource.setMetrics(cadenceRpm = 85, resistancePercent = 40, powerWatts = 150)
+        advanceTimeBy(2_000)
+        runCurrent()
+
+        manager.pause()
+        assertTrue(!manager.autoPaused.value)
+
+        // Still pedaling hard — a manual pause must stay paused (no watcher running).
+        advanceTimeBy(5_000)
+        runCurrent()
+
+        assertEquals(RideSessionState.Paused, manager.state.value)
+    }
+
+    @Test
+    fun `threshold of zero disables auto-pause entirely`() = runTest {
+        val manager = RideSessionManager(
+            fakeBikeDataSource, rideRepository, backgroundScope, autoPauseThresholdSec = 0,
+        ) { 0L }
+        manager.start(profileId)
+        fakeBikeDataSource.setMetrics(cadenceRpm = 85, resistancePercent = 40, powerWatts = 150)
+        advanceTimeBy(2_000)
+        runCurrent()
+        fakeBikeDataSource.setMetrics(cadenceRpm = 0, resistancePercent = 40, powerWatts = 0)
+
+        advanceTimeBy(30_000)
+        runCurrent()
+
+        assertEquals(RideSessionState.Active, manager.state.value)
+        assertTrue(!manager.autoPaused.value)
+    }
+
+    @Test
+    fun `manual resume after an auto-pause clears the auto-paused flag`() = runTest {
+        val manager = RideSessionManager(
+            fakeBikeDataSource, rideRepository, backgroundScope, autoPauseThresholdSec = 3,
+        ) { 0L }
+        manager.start(profileId)
+        fakeBikeDataSource.setMetrics(cadenceRpm = 85, resistancePercent = 40, powerWatts = 150)
+        advanceTimeBy(2_000)
+        runCurrent()
+        fakeBikeDataSource.setMetrics(cadenceRpm = 0, resistancePercent = 40, powerWatts = 0)
+        advanceTimeBy(3_000)
+        runCurrent()
+        assertTrue(manager.autoPaused.value)
+
+        manager.resume()
+
+        assertEquals(RideSessionState.Active, manager.state.value)
+        assertTrue(!manager.autoPaused.value)
+        // The stale resume-watcher must not later re-toggle state; advance well past a poll.
+        advanceTimeBy(5_000)
+        runCurrent()
+        assertEquals(RideSessionState.Active, manager.state.value)
+    }
+
     // --- Ride goals (T13/#13) ----------------------------------------------------------------
 
     @Test

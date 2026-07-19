@@ -54,6 +54,9 @@ fun InRideScreen(
             if (!uiState.sensorsAvailable) {
                 SensorFailureBanner()
             }
+            if (uiState.autoPaused) {
+                AutoPausedBanner()
+            }
 
             Column(
                 modifier = Modifier
@@ -214,6 +217,25 @@ private fun SensorFailureBanner(modifier: Modifier = Modifier) {
         Text(
             text = "Sensors not detected — check bike connection",
             color = OpenRideColors.Background,
+            fontWeight = FontWeight.Bold,
+        )
+    }
+}
+
+/** Shown while the ride auto-paused on freewheel (PRD #20/T20) — pedaling auto-resumes it,
+ *  or the rider can tap Resume. Distinct from the sensor-failure banner. */
+@Composable
+private fun AutoPausedBanner(modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.secondaryContainer)
+            .padding(16.dp),
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            text = "Auto-paused — pedal to resume",
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
             fontWeight = FontWeight.Bold,
         )
     }
