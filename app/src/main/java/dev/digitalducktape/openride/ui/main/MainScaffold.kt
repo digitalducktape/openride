@@ -124,12 +124,24 @@ fun MainScaffold(
             composable(MainTabs.Profile) {
                 val viewModel: ProfileTabViewModel = viewModel(
                     factory = viewModelFactory {
-                        ProfileTabViewModel(appContainer.activeProfileHolder, appContainer.profileRepository)
+                        ProfileTabViewModel(
+                            appContainer.activeProfileHolder,
+                            appContainer.profileRepository,
+                            appContainer.backupRepository,
+                        )
                     },
                 )
                 ProfileTabScreen(
                     viewModel = viewModel,
                     onSwitchRider = {
+                        outerNavController.navigate(Destinations.ProfileSelect) {
+                            popUpTo(Destinations.Main) { inclusive = true }
+                        }
+                    },
+                    onRestoreComplete = {
+                        // The active profile (and possibly its id entirely) may no longer be
+                        // meaningful after a restore, so route back to profile select the same
+                        // way "Switch rider" does rather than staying on a now-stale screen.
                         outerNavController.navigate(Destinations.ProfileSelect) {
                             popUpTo(Destinations.Main) { inclusive = true }
                         }

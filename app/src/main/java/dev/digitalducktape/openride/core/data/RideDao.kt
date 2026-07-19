@@ -29,4 +29,25 @@ interface RideDao {
 
     @Query("SELECT * FROM ride_samples WHERE rideId = :rideId ORDER BY tSec ASC")
     suspend fun getSamples(rideId: Long): List<RideSample>
+
+    // --- Backup & restore (PRD P1-8, T15) ---------------------------------------------------
+
+    @Query("SELECT * FROM rides")
+    suspend fun getAllRidesOnce(): List<Ride>
+
+    @Query("SELECT * FROM ride_samples")
+    suspend fun getAllSamplesOnce(): List<RideSample>
+
+    /**
+     * Bulk-inserts [rides] as-is, preserving each row's existing (non-zero) [Ride.id] — see
+     * [ProfileDao.insertAll]'s doc for why this matters for a backup round-trip.
+     */
+    @Insert
+    suspend fun insertRides(rides: List<Ride>)
+
+    @Query("DELETE FROM rides")
+    suspend fun deleteAllRides()
+
+    @Query("DELETE FROM ride_samples")
+    suspend fun deleteAllSamples()
 }

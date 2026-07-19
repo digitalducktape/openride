@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.room.Room
+import dev.digitalducktape.openride.core.backup.BackupRepository
 import dev.digitalducktape.openride.core.content.YouTubeContentRepository
 import dev.digitalducktape.openride.core.data.OpenRideDatabase
 import dev.digitalducktape.openride.core.data.ProfileRepository
@@ -45,6 +46,11 @@ class AppContainer(private val applicationContext: Context) {
 
     val rideRepository: RideRepository by lazy {
         RideRepository(database, database.rideDao())
+    }
+
+    /** Whole-database backup/restore to one shareable file (PRD P1-8, T15). */
+    val backupRepository: BackupRepository by lazy {
+        BackupRepository(database, database.profileDao(), database.rideDao())
     }
 
     val bikeDataSource: BikeDataSource by lazy {
