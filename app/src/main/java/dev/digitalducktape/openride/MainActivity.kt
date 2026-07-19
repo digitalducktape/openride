@@ -23,6 +23,11 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+        // PRD P1-4, T17: eagerly construct (the container property is `by lazy`) so the
+        // heart-rate manager starts observing the active profile's paired strap from launch,
+        // rather than only whenever a screen happens to reference it first.
+        appContainer.heartRateManager
+
         // PRD P0-10: keep the screen on for the duration of an active ride, and let normal
         // display timeout resume the instant it isn't. Driven from the activity (rather than
         // a screen-local effect) so the flag can't be left dangling by screen

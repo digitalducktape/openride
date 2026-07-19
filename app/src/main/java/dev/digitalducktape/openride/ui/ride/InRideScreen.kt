@@ -141,6 +141,17 @@ fun InRideScreen(
                         label = "Output",
                         value = "%.1f kJ".format(uiState.liveOutputKj),
                     )
+                    // Heart rate (PRD P1-4, T17) — only once a strap is paired for this rider.
+                    // Shows "--" while paired-but-not-yet-connected, the live bpm once connected.
+                    if (uiState.heartRateTileVisible) {
+                        SecondaryStat(
+                            label = "Heart Rate",
+                            value = uiState.heartRateBpm
+                                ?.takeIf { uiState.heartRateConnected }
+                                ?.let { "$it bpm" }
+                                ?: "--",
+                        )
+                    }
                 }
 
                 Row(

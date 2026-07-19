@@ -14,6 +14,8 @@ import dev.digitalducktape.openride.ui.profile.ProfileCreateScreen
 import dev.digitalducktape.openride.ui.profile.ProfileCreateViewModel
 import dev.digitalducktape.openride.ui.profile.ProfileSelectScreen
 import dev.digitalducktape.openride.ui.profile.ProfileSelectViewModel
+import dev.digitalducktape.openride.ui.profile.HrPairingScreen
+import dev.digitalducktape.openride.ui.profile.HrPairingViewModel
 import dev.digitalducktape.openride.ui.ride.InRideScreen
 import dev.digitalducktape.openride.ui.ride.InRideViewModel
 import dev.digitalducktape.openride.ui.ride.RideSummaryScreen
@@ -68,6 +70,22 @@ fun OpenRideNavHost(appContainer: AppContainer) {
             MainScaffold(appContainer = appContainer, outerNavController = navController)
         }
 
+        composable(Destinations.HrPairing) {
+            val viewModel: HrPairingViewModel = viewModel(
+                factory = viewModelFactory {
+                    HrPairingViewModel(
+                        appContainer.bleScanner,
+                        appContainer.profileRepository,
+                        appContainer.activeProfileHolder,
+                    )
+                },
+            )
+            HrPairingScreen(
+                viewModel = viewModel,
+                onDone = { navController.popBackStack() },
+            )
+        }
+
         composable(Destinations.InRide) {
             val viewModel: InRideViewModel = viewModel(
                 factory = viewModelFactory {
@@ -76,6 +94,7 @@ fun OpenRideNavHost(appContainer: AppContainer) {
                         appContainer.bikeDataSource,
                         appContainer.profileRepository,
                         appContainer.activeProfileHolder,
+                        appContainer.heartRateManager,
                     )
                 },
             )
