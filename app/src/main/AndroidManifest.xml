@@ -23,6 +23,18 @@
             </intent-filter>
         </activity>
 
+        <!-- Backs ExportShare.kt (PRD P1-1/P1-2, T14): hands exported TCX/CSV files to the
+             Android share sheet via a content:// URI instead of a raw file:// path. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <!--
           Opt-in HOME launcher alias for MainActivity (PRD P0-8, T12). Disabled by default
           (android:enabled="false") so simply installing the app never hijacks the tablet's

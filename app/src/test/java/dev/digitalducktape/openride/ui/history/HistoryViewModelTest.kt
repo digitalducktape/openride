@@ -105,4 +105,39 @@ class HistoryViewModelTest {
         val rows = viewModel.rows.first { it.isNotEmpty() }
         assertEquals(1, rows.size)
     }
+
+    // --- historyCsvContent (PRD P1-2, T14) ----------------------------------------------------
+
+    @Test
+    fun `historyCsvContent is header-only with no active profile`() = runTest {
+        val viewModel = HistoryViewModel(activeProfileHolder, rideRepository)
+
+        val csv = viewModel.historyCsvContent()
+
+        assertEquals(
+            "date,duration_sec,avg_cadence,max_cadence,avg_power,max_power,avg_resistance,output_kj,calories\n",
+            csv,
+        )
+    }
+
+    @Test
+    fun `historyCsvContent reflects only the active profile's rides`() = runTest {
+        val profileA = profileRepository.createProfile(
+            Profile(name = "A", avatarEmoji = "🚴", avatarColor = 0xFF00AAFF.toInt(), weightKg = null, ftp = null),
+        )
+        val profileB = profileRepository.createProfile(
+            Profile(name = "B", avatarEmoji = "🔥", avatarColor = 0xFF00AAFF.toInt(), weightKg = null, ftp = null),
+        )
+        rideRepository.saveRide(ride(profileA, startEpochMs = 1_000L), emptyList())
+        rideRepository.saveRide(ride(profileB, startEpochMs = 2_000L), emptyList())
+        activeProfileHolder.setActiveProfile(profileA)
+        val viewModel = HistoryViewModel(activeProfileHolder, rideRepository)
+        viewModel.rows.first { it.isNotEmpty() } // let the profile-scoped flow settle
+
+        val csv = viewModel.historyCsvContent()
+
+        val dataRows = csv.trimEnd('\n').split("\n").drop(1)
+        assertEquals(1, dataRows.size)
+        assertTrue(dataRows.single().contains("600,80,95,150,220,40,90.00,90"))
+    }
 }

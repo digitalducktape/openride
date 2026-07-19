@@ -1,6 +1,8 @@
 package dev.digitalducktape.openride.ui.ride
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -8,6 +10,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -17,8 +20,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.digitalducktape.openride.ui.common.ExportShare
 import dev.digitalducktape.openride.ui.common.TimeFormat
 import kotlinx.coroutines.launch
 
@@ -39,6 +44,7 @@ fun RideSummaryScreen(
     val suggestedFtp by viewModel.suggestedFtp.collectAsState()
     val ftpApplied by viewModel.ftpApplied.collectAsState()
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     LaunchedEffect(Unit) { viewModel.load() }
 
@@ -83,6 +89,22 @@ fun RideSummaryScreen(
                     )
                     PowerGraph(samples = samples, modifier = Modifier.fillMaxWidth())
 
+                    ExportRow(
+                        onExportTcx = {
+                            viewModel.tcxContent()?.let { tcx ->
+                                ExportShare.share(context, "ride_${current.id}.tcx", tcx, "application/vnd.garmin.tcx+xml")
+                            }
+                        },
+                        onExportCsv = {
+                            viewModel.sampleCsvContent()?.let { csv ->
+                                ExportShare.share(context, "ride_${current.id}.csv", csv, "text/csv")
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 24.dp),
+                    )
+
                     if (suggestedFtp != null) {
                         FtpSuggestionCard(
                             suggestedFtp = suggestedFtp!!,
@@ -106,6 +128,26 @@ fun RideSummaryScreen(
                 Text("Done")
             }
         }
+    }
+}
+
+/**
+ * Export actions (PRD P1-1/P1-2, T14): a TCX file (with the full per-second series, for
+ * Apple Health via a third-party bridge app) and a plain per-second CSV, both handed to the
+ * Android share sheet via [ExportShare].
+ */
+@Composable
+private fun ExportRow(
+    onExportTcx: () -> Unit,
+    onExportCsv: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        OutlinedButton(onClick = onExportTcx) { Text("Export TCX") }
+        OutlinedButton(onClick = onExportCsv) { Text("Export CSV") }
     }
 }
 
