@@ -19,6 +19,7 @@ import androidx.navigation.compose.rememberNavController
 import dev.digitalducktape.openride.AppContainer
 import dev.digitalducktape.openride.viewModelFactory
 import dev.digitalducktape.openride.ui.classes.ClassesScreen
+import dev.digitalducktape.openride.ui.classes.ClassesViewModel
 import dev.digitalducktape.openride.ui.history.HistoryScreen
 import dev.digitalducktape.openride.ui.history.HistoryViewModel
 import dev.digitalducktape.openride.ui.home.HomeScreen
@@ -100,7 +101,12 @@ fun MainScaffold(
                 )
             }
             composable(MainTabs.Classes) {
-                ClassesScreen()
+                val viewModel: ClassesViewModel = viewModel(
+                    factory = viewModelFactory {
+                        ClassesViewModel(appContainer.contentRepository)
+                    },
+                )
+                ClassesScreen(viewModel = viewModel)
             }
             composable(MainTabs.History) {
                 val viewModel: HistoryViewModel = viewModel(
