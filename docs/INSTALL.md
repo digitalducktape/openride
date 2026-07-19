@@ -117,3 +117,12 @@ To fully back out of everything above, roughly in reverse order:
 
 Reverting network-level OTA blocks and any OpenPelo-side launcher/app removal is outside this
 app's scope — those are OpenPelo setup steps, not something OpenRide's own APK controls.
+
+## Bluetooth headphones (T19 / P1-9)
+
+Class content plays through the YouTube app (OpenRide launches it via an intent) and OpenRide
+never overrides audio routing, so Bluetooth-headphone audio "just works" through Android's own
+routing: pair the headphones once in **Android Settings → Connected devices → Bluetooth** (you
+can reach Android settings from OpenRide's Profile tab), and audio follows them automatically
+whenever they're connected, falling back to the bike's speakers when they're not. There is no
+OpenRide-side setting for this by design — the OS owns it.
