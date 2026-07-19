@@ -32,6 +32,19 @@ android {
                 "proguard-rules.pro"
             )
         }
+
+        // T3/#3: the real-sensor build. Identical to debug but flips USE_REAL_BIKE_SENSOR on
+        // so AppContainer wires PelotonBikeDataSource (the live Gen 2 affernet binding) instead
+        // of MockBikeDataSource. Installs alongside the mock build via a .real applicationId
+        // suffix so both can coexist on the tablet. Build/install the real-sensor APK with:
+        //     ./gradlew :app:installDebugReal
+        create("debugReal") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".real"
+            versionNameSuffix = "-real"
+            buildConfigField("boolean", "USE_REAL_BIKE_SENSOR", "true")
+            matchingFallbacks += "debug"
+        }
     }
 
     compileOptions {
@@ -46,6 +59,11 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+        // T3/#3: the real Gen 2 sensor binding talks to Peloton's affernet system service
+        // through a reconstructed AIDL interface (app/src/main/aidl/com/onepeloton/...),
+        // so the AIDL toolchain generates the Stub/proxy with the correct transaction codes
+        // and Parcel marshalling instead of hand-rolled Parcel.transact() guesses.
+        aidl = true
     }
 
     testOptions {
@@ -97,4 +115,10 @@ dependencies {
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.androidx.room.testing)
     testImplementation(platform(libs.androidx.compose.bom))
+
+    // Instrumented (on-device) tests. Used by SensorBindingInstrumentedTest to verify the
+    // real Gen 2 affernet bind/decode pipeline on the physical bike tablet (T3/#3).
+    androidTestImplementation(libs.androidx.test.junit)
+    androidTestImplementation(libs.androidx.test.core)
+    androidTestImplementation("androidx.test:runner:1.6.1")
 }
