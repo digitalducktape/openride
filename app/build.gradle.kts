@@ -17,6 +17,11 @@ android {
         versionName = "0.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // T3 / #3: toggle between MockBikeDataSource and the real (unverified-on-hardware)
+        // Gen 2 sensor binding in AppContainer. Defaults to false (Mock) — flip only when
+        // building for the actual bike tablet, see PelotonBikeDataSource's TODOs.
+        buildConfigField("boolean", "USE_REAL_BIKE_SENSOR", "false")
     }
 
     buildTypes {
@@ -40,6 +45,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     testOptions {

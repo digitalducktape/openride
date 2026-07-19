@@ -12,6 +12,7 @@ import dev.digitalducktape.openride.core.profile.ActiveProfileHolder
 import dev.digitalducktape.openride.core.ride.RideSessionManager
 import dev.digitalducktape.openride.core.sensor.BikeDataSource
 import dev.digitalducktape.openride.core.sensor.MockBikeDataSource
+import dev.digitalducktape.openride.core.sensor.PelotonBikeDataSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 
@@ -20,9 +21,11 @@ import kotlinx.coroutines.SupervisorJob
  * [MainActivity] and Compose screens can pull their dependencies from one place via
  * constructor injection.
  *
- * [bikeDataSource] is the [MockBikeDataSource] until T3 (binding the real Gen 2 system
- * service) lands — everything above the [BikeDataSource] interface is already wired
- * against the abstraction, so swapping it in later is a one-line change here.
+ * [bikeDataSource] is [MockBikeDataSource] by default; [BuildConfig.USE_REAL_BIKE_SENSOR]
+ * (default `false`) switches it to [PelotonBikeDataSource] — the real Gen 2 system-service
+ * binding from T3/#3, which is unverified on actual hardware (see that class's doc). Every
+ * other layer only depends on the [BikeDataSource] interface, so this toggle is the one
+ * place the choice is made.
  */
 class AppContainer(private val applicationContext: Context) {
     /** Long-lived scope for singletons that need to run coroutines outside any one screen's lifecycle. */
@@ -45,7 +48,11 @@ class AppContainer(private val applicationContext: Context) {
     }
 
     val bikeDataSource: BikeDataSource by lazy {
-        MockBikeDataSource(scope = containerScope)
+        if (BuildConfig.USE_REAL_BIKE_SENSOR) {
+            PelotonBikeDataSource(applicationContext).also { it.start() }
+        } else {
+            MockBikeDataSource(scope = containerScope)
+        }
     }
 
     val rideSessionManager: RideSessionManager by lazy {
