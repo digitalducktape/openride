@@ -1,10 +1,13 @@
 package dev.digitalducktape.openride
 
 import android.content.Context
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.room.Room
 import dev.digitalducktape.openride.core.data.OpenRideDatabase
 import dev.digitalducktape.openride.core.data.ProfileRepository
 import dev.digitalducktape.openride.core.data.RideRepository
+import dev.digitalducktape.openride.core.profile.ActiveProfileHolder
 import dev.digitalducktape.openride.core.ride.RideSessionManager
 import dev.digitalducktape.openride.core.sensor.BikeDataSource
 import dev.digitalducktape.openride.core.sensor.MockBikeDataSource
@@ -51,4 +54,21 @@ class AppContainer(private val applicationContext: Context) {
             scope = containerScope,
         )
     }
+
+    /** Scopes the session to whichever rider is currently selected (PRD P0-3). */
+    val activeProfileHolder: ActiveProfileHolder by lazy {
+        ActiveProfileHolder(applicationContext)
+    }
 }
+
+/**
+ * Builds a [ViewModelProvider.Factory] from a plain lambda, so screens can construct their
+ * view models straight from [AppContainer] dependencies (manual DI, no Hilt) while still
+ * getting normal [ViewModel] lifecycle/state-retention behavior from Compose Navigation's
+ * per-destination [androidx.lifecycle.ViewModelStoreOwner].
+ */
+fun <T : ViewModel> viewModelFactory(create: () -> T): ViewModelProvider.Factory =
+    object : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <VM : ViewModel> create(modelClass: Class<VM>): VM = create() as VM
+    }
