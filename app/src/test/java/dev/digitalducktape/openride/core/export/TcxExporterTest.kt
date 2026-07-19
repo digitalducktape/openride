@@ -126,6 +126,24 @@ class TcxExporterTest {
     }
 
     @Test
+    fun `includes HeartRateBpm only for samples that have a reading`() {
+        val samples = listOf(
+            RideSample(rideId = 42L, tSec = 0, cadence = 85, resistance = 45, power = 120, heartRateBpm = 128),
+            RideSample(rideId = 42L, tSec = 1, cadence = 90, resistance = 50, power = 150, heartRateBpm = null),
+        )
+        val xml = TcxExporter.export(fixtureRide().copy(durationSec = 2), samples)
+        val doc = parse(xml)
+
+        val trackpoints = doc.getElementsByTagNameNS("*", "Trackpoint")
+        val firstHr = (trackpoints.item(0) as Element).getElementsByTagNameNS("*", "HeartRateBpm")
+        val secondHr = (trackpoints.item(1) as Element).getElementsByTagNameNS("*", "HeartRateBpm")
+
+        assertEquals(1, firstHr.length)
+        assertEquals("128", (firstHr.item(0) as Element).getElementsByTagNameNS("*", "Value").item(0).textContent)
+        assertEquals(0, secondHr.length)
+    }
+
+    @Test
     fun `handles an empty sample series without crashing`() {
         val xml = TcxExporter.export(fixtureRide(), emptyList())
         val doc = parse(xml)

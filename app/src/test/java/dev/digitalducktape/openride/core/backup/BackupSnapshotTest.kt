@@ -23,6 +23,28 @@ class BackupSnapshotTest {
     }
 
     @Test
+    fun `Profile with a paired HR device address round-trips`() {
+        val profile = Profile(
+            id = 2L,
+            name = "Ed",
+            avatarEmoji = "🚴",
+            avatarColor = 0xFF00AAFF.toInt(),
+            weightKg = null,
+            ftp = null,
+            pairedHrDeviceAddress = "AA:BB:CC:DD:EE:FF",
+        )
+
+        assertEquals(profile, profile.toBackup().toEntity())
+    }
+
+    @Test
+    fun `RideSample with a heart rate reading round-trips`() {
+        val sample = RideSample(rideId = 1L, tSec = 5, cadence = 90, resistance = 50, power = 180, heartRateBpm = 142)
+
+        assertEquals(sample, sample.toBackup().toEntity())
+    }
+
+    @Test
     fun `Profile with null optional fields round-trips`() {
         val profile = Profile(id = 1L, name = "Kid", avatarEmoji = "🤖", avatarColor = 0xFFAA0000.toInt(), weightKg = null, ftp = null)
 
