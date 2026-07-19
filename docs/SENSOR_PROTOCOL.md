@@ -153,13 +153,20 @@ Target: `PLTN-RB1VQ`, Android 11, build `RQ.250113.A`.
   verification relies on the real idle frames the service streams once a callback is registered,
   not on synthetic data.
 
-**Still requires a rider (manual, cannot be done here):**
+**Confirmed with a rider pedaling** (90 s capture via `LivePedalStreamTest.recordLivePedalStream`,
+full log at `docs/t3_live_pedal_capture.txt`) — this closes #3:
 
-- Confirming live `cadenceRpm` tracks actual pedaling and `powerWatts` rises with effort. The
-  transport + decode are proven; only a person on the bike can confirm the sensor *values* map
-  as expected under load. Turning the resistance knob during that session (changes resistance
-  with no pedaling) is a good extra live-signal check — the idle frame already shows a plausible
-  resistance value, so this is expected to work.
+- **Cadence tracks pedaling**: `cadenceRpm` moved 21 → 40 → 66 → 78 → peaked **90 rpm** and
+  varied back down with actual leg speed — not a static value.
+- **Resistance tracks the knob**: `resistancePercent` swept 0 → 5 → 24 → **46** → 4 → ~40 →
+  ~30 as the rider turned the knob.
+- **Power tracks effort**: `powerWatts` rose with cadence *and* resistance together, peaking at
+  **63 W** (cadence 78, resistance 32) and falling to 2–4 W when the rider eased off — the
+  expected cadence×resistance relationship, confirming `mPower`'s centi-watt scaling.
+- **89 frames over 90 s at ~1 Hz, `Connected` from the first frame, zero dropouts.**
+
+Verified on `PLTN-RB1VQ` / build `RQ.250113.A`. The full field-offset reconstruction is therefore
+correct under live load — T3/#3 is fully verified end-to-end.
 
 The automated check is `app/src/androidTest/.../SensorBindingInstrumentedTest.kt`
 (`./gradlew :app:connectedDebugAndroidTest`), portable: it self-skips the live assertions on any
