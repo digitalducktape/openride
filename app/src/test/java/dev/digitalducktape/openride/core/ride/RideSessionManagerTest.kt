@@ -330,4 +330,48 @@ class RideSessionManagerTest {
         assertEquals(3, secondRide.durationSec)
         assertEquals((0 until 3).toList(), rideRepository.getSamples(secondRide.id).map { it.tSec })
     }
+
+    // --- Ride goals (T13/#13) ----------------------------------------------------------------
+
+    @Test
+    fun `goal defaults to None`() = runTest {
+        val manager = RideSessionManager(fakeBikeDataSource, rideRepository, backgroundScope) { 0L }
+
+        assertEquals(RideGoal.None, manager.goal.value)
+    }
+
+    @Test
+    fun `setGoal takes effect while Idle`() = runTest {
+        val manager = RideSessionManager(fakeBikeDataSource, rideRepository, backgroundScope) { 0L }
+
+        manager.setGoal(RideGoal.Duration(targetSec = 600))
+
+        assertEquals(RideGoal.Duration(600), manager.goal.value)
+    }
+
+    @Test
+    fun `setGoal is a no-op once the ride has started`() = runTest {
+        val manager = RideSessionManager(fakeBikeDataSource, rideRepository, backgroundScope) { 0L }
+        manager.start(profileId)
+
+        manager.setGoal(RideGoal.Output(targetKj = 100.0))
+
+        assertEquals(RideGoal.None, manager.goal.value)
+    }
+
+    @Test
+    fun `goal persists through the ride and is cleared by reset`() = runTest {
+        val manager = RideSessionManager(fakeBikeDataSource, rideRepository, backgroundScope) { 0L }
+        manager.setGoal(RideGoal.Duration(targetSec = 300))
+        manager.start(profileId)
+        advanceTimeBy(1_000)
+        runCurrent()
+        assertEquals(RideGoal.Duration(300), manager.goal.value)
+
+        manager.stop()
+        assertEquals(RideGoal.Duration(300), manager.goal.value) // still visible on the summary path
+
+        manager.reset()
+        assertEquals(RideGoal.None, manager.goal.value)
+    }
 }

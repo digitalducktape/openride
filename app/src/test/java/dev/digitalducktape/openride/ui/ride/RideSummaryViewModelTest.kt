@@ -8,7 +8,9 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.digitalducktape.openride.core.data.OpenRideDatabase
 import dev.digitalducktape.openride.core.data.Profile
 import dev.digitalducktape.openride.core.data.ProfileRepository
+import dev.digitalducktape.openride.core.data.Ride
 import dev.digitalducktape.openride.core.data.RideRepository
+import dev.digitalducktape.openride.core.data.RideSample
 import dev.digitalducktape.openride.core.ride.FakeBikeDataSource
 import dev.digitalducktape.openride.core.ride.RideSessionManager
 import dev.digitalducktape.openride.core.ride.RideSessionState
@@ -18,6 +20,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -28,6 +31,7 @@ class RideSummaryViewModelTest {
 
     private lateinit var db: OpenRideDatabase
     private lateinit var rideRepository: RideRepository
+    private lateinit var profileRepository: ProfileRepository
     private var profileId: Long = 0L
 
     @Before
@@ -35,7 +39,8 @@ class RideSummaryViewModelTest {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         db = Room.inMemoryDatabaseBuilder(context, OpenRideDatabase::class.java).build()
         rideRepository = RideRepository(db, db.rideDao())
-        profileId = ProfileRepository(db.profileDao()).createProfile(
+        profileRepository = ProfileRepository(db.profileDao())
+        profileId = profileRepository.createProfile(
             Profile(name = "Ed", avatarEmoji = "🚴", avatarColor = 0xFF00AAFF.toInt(), weightKg = null, ftp = null),
         )
     }
@@ -54,7 +59,7 @@ class RideSummaryViewModelTest {
         val ride = manager.stop()
         requireNotNull(ride)
 
-        val viewModel = RideSummaryViewModel(rideRepository, manager, ride.id)
+        val viewModel = RideSummaryViewModel(rideRepository, profileRepository, manager, ride.id)
         viewModel.load()
 
         assertNotNull(viewModel.ride.value)
@@ -72,7 +77,7 @@ class RideSummaryViewModelTest {
         val ride = manager.stop()
         requireNotNull(ride)
 
-        val viewModel = RideSummaryViewModel(rideRepository, manager, ride.id)
+        val viewModel = RideSummaryViewModel(rideRepository, profileRepository, manager, ride.id)
         viewModel.load()
 
         assertEquals(3, viewModel.samples.value.size)
@@ -89,7 +94,7 @@ class RideSummaryViewModelTest {
         val ride = manager.stop()
         requireNotNull(ride)
 
-        val viewModel = RideSummaryViewModel(rideRepository, manager, ride.id)
+        val viewModel = RideSummaryViewModel(rideRepository, profileRepository, manager, ride.id)
         viewModel.dismiss()
 
         assertEquals(RideSessionState.Idle, manager.state.value)
@@ -105,9 +110,84 @@ class RideSummaryViewModelTest {
         requireNotNull(ride)
         manager.reset() // back to Idle, simulating an unrelated older ride being viewed later
 
-        val viewModel = RideSummaryViewModel(rideRepository, manager, ride.id)
+        val viewModel = RideSummaryViewModel(rideRepository, profileRepository, manager, ride.id)
         viewModel.dismiss()
 
         assertEquals(RideSessionState.Idle, manager.state.value)
+    }
+
+    // --- FTP suggestion (T13/#13) ------------------------------------------------------------
+
+    private fun longRideOf(power: Int): Ride = Ride(
+        profileId = profileId,
+        startEpochMs = 0L,
+        durationSec = 1200,
+        avgCadence = 90,
+        maxCadence = 90,
+        avgPower = power,
+        maxPower = power,
+        avgResistance = 50,
+        outputKj = power * 1200 / 1000.0,
+        calories = null,
+    )
+
+    @Test
+    fun `suggestedFtp is null for a ride shorter than 20 minutes`() = runTest {
+        val manager = RideSessionManager(FakeBikeDataSource(), rideRepository, backgroundScope) { 0L }
+        manager.start(profileId)
+        advanceTimeBy(5_000)
+        runCurrent()
+        val ride = manager.stop()
+        requireNotNull(ride)
+
+        val viewModel = RideSummaryViewModel(rideRepository, profileRepository, manager, ride.id)
+        viewModel.load()
+
+        assertNull(viewModel.suggestedFtp.value)
+    }
+
+    @Test
+    fun `suggestedFtp is 95pct of the best 20-minute average for a 20-minute-plus ride`() = runTest {
+        val samples = (0 until 1200).map { t -> RideSample(rideId = 0L, tSec = t, cadence = 90, resistance = 50, power = 200) }
+        val rideId = rideRepository.saveRide(longRideOf(power = 200), samples)
+        val manager = RideSessionManager(FakeBikeDataSource(), rideRepository, backgroundScope) { 0L }
+
+        val viewModel = RideSummaryViewModel(rideRepository, profileRepository, manager, rideId)
+        viewModel.load()
+
+        assertEquals(190, viewModel.suggestedFtp.value) // 95% of 200W
+    }
+
+    @Test
+    fun `applySuggestedFtp updates the profile that logged the ride and flips ftpApplied`() = runTest {
+        val samples = (0 until 1200).map { t -> RideSample(rideId = 0L, tSec = t, cadence = 90, resistance = 50, power = 200) }
+        val rideId = rideRepository.saveRide(longRideOf(power = 200), samples)
+        val manager = RideSessionManager(FakeBikeDataSource(), rideRepository, backgroundScope) { 0L }
+
+        val viewModel = RideSummaryViewModel(rideRepository, profileRepository, manager, rideId)
+        viewModel.load()
+        assertEquals(false, viewModel.ftpApplied.value)
+
+        viewModel.applySuggestedFtp()
+
+        assertEquals(190, profileRepository.getProfile(profileId)?.ftp)
+        assertTrue(viewModel.ftpApplied.value)
+    }
+
+    @Test
+    fun `applySuggestedFtp is a no-op when the ride is too short to have a suggestion`() = runTest {
+        val manager = RideSessionManager(FakeBikeDataSource(), rideRepository, backgroundScope) { 0L }
+        manager.start(profileId)
+        advanceTimeBy(5_000)
+        runCurrent()
+        val ride = manager.stop()
+        requireNotNull(ride)
+
+        val viewModel = RideSummaryViewModel(rideRepository, profileRepository, manager, ride.id)
+        viewModel.load()
+        viewModel.applySuggestedFtp()
+
+        assertEquals(null, profileRepository.getProfile(profileId)?.ftp)
+        assertEquals(false, viewModel.ftpApplied.value)
     }
 }

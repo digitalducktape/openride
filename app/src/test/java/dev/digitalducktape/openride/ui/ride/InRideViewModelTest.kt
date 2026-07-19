@@ -9,10 +9,14 @@ import dev.digitalducktape.openride.core.data.OpenRideDatabase
 import dev.digitalducktape.openride.core.data.Profile
 import dev.digitalducktape.openride.core.data.ProfileRepository
 import dev.digitalducktape.openride.core.data.RideRepository
+import dev.digitalducktape.openride.core.profile.ActiveProfileHolder
 import dev.digitalducktape.openride.core.ride.FakeBikeDataSource
+import dev.digitalducktape.openride.core.ride.PowerZone
+import dev.digitalducktape.openride.core.ride.RideGoal
 import dev.digitalducktape.openride.core.ride.RideSessionManager
 import dev.digitalducktape.openride.core.ride.RideSessionState
 import dev.digitalducktape.openride.core.sensor.ConnectionState
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
@@ -30,6 +34,8 @@ class InRideViewModelTest {
 
     private lateinit var db: OpenRideDatabase
     private lateinit var rideRepository: RideRepository
+    private lateinit var profileRepository: ProfileRepository
+    private lateinit var activeProfileHolder: ActiveProfileHolder
     private lateinit var fakeBikeDataSource: FakeBikeDataSource
     private var profileId: Long = 0L
 
@@ -38,9 +44,12 @@ class InRideViewModelTest {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         db = Room.inMemoryDatabaseBuilder(context, OpenRideDatabase::class.java).build()
         rideRepository = RideRepository(db, db.rideDao())
-        profileId = ProfileRepository(db.profileDao()).createProfile(
+        profileRepository = ProfileRepository(db.profileDao())
+        activeProfileHolder = ActiveProfileHolder(context)
+        profileId = profileRepository.createProfile(
             Profile(name = "Ed", avatarEmoji = "🚴", avatarColor = 0xFF00AAFF.toInt(), weightKg = null, ftp = null),
         )
+        activeProfileHolder.setActiveProfile(profileId)
         fakeBikeDataSource = FakeBikeDataSource()
     }
 
@@ -52,7 +61,7 @@ class InRideViewModelTest {
     @Test
     fun `sensorsAvailable is false while the connection is down`() = runTest {
         val manager = RideSessionManager(fakeBikeDataSource, rideRepository, backgroundScope)
-        val viewModel = InRideViewModel(manager, fakeBikeDataSource)
+        val viewModel = InRideViewModel(manager, fakeBikeDataSource, profileRepository, activeProfileHolder)
         val values = mutableListOf<InRideUiState>()
         backgroundScope.launch { viewModel.uiState.collect { values.add(it) } }
         runCurrent()
@@ -66,7 +75,7 @@ class InRideViewModelTest {
     @Test
     fun `isPaused reflects the session state`() = runTest {
         val manager = RideSessionManager(fakeBikeDataSource, rideRepository, backgroundScope)
-        val viewModel = InRideViewModel(manager, fakeBikeDataSource)
+        val viewModel = InRideViewModel(manager, fakeBikeDataSource, profileRepository, activeProfileHolder)
         val values = mutableListOf<InRideUiState>()
         backgroundScope.launch { viewModel.uiState.collect { values.add(it) } }
         runCurrent()
@@ -83,7 +92,7 @@ class InRideViewModelTest {
     @Test
     fun `liveOutputKj mirrors avgPower times elapsedSec over 1000`() = runTest {
         val manager = RideSessionManager(fakeBikeDataSource, rideRepository, backgroundScope)
-        val viewModel = InRideViewModel(manager, fakeBikeDataSource)
+        val viewModel = InRideViewModel(manager, fakeBikeDataSource, profileRepository, activeProfileHolder)
         val values = mutableListOf<InRideUiState>()
         backgroundScope.launch { viewModel.uiState.collect { values.add(it) } }
         runCurrent()
@@ -100,7 +109,7 @@ class InRideViewModelTest {
     @Test
     fun `distanceMiles accumulates while Active and freezes while Paused`() = runTest {
         val manager = RideSessionManager(fakeBikeDataSource, rideRepository, backgroundScope)
-        val viewModel = InRideViewModel(manager, fakeBikeDataSource)
+        val viewModel = InRideViewModel(manager, fakeBikeDataSource, profileRepository, activeProfileHolder)
         val values = mutableListOf<InRideUiState>()
         backgroundScope.launch { viewModel.uiState.collect { values.add(it) } }
         runCurrent()
@@ -122,7 +131,7 @@ class InRideViewModelTest {
     @Test
     fun `endRide delegates to the session manager and persists the ride`() = runTest {
         val manager = RideSessionManager(fakeBikeDataSource, rideRepository, backgroundScope) { 0L }
-        val viewModel = InRideViewModel(manager, fakeBikeDataSource)
+        val viewModel = InRideViewModel(manager, fakeBikeDataSource, profileRepository, activeProfileHolder)
         manager.start(profileId)
         advanceTimeBy(2_000)
         runCurrent()
@@ -132,5 +141,117 @@ class InRideViewModelTest {
         requireNotNull(ride)
         assertTrue(ride.id > 0)
         assertEquals(RideSessionState.Finished(ride), manager.state.value)
+    }
+
+    // --- Power zones (T13/#13) --------------------------------------------------------------
+
+    @Test
+    fun `currentZone is null when the active profile has no FTP set`() = runTest {
+        val manager = RideSessionManager(fakeBikeDataSource, rideRepository, backgroundScope)
+        val viewModel = InRideViewModel(manager, fakeBikeDataSource, profileRepository, activeProfileHolder)
+        val values = mutableListOf<InRideUiState>()
+        backgroundScope.launch { viewModel.uiState.collect { values.add(it) } }
+        runCurrent()
+
+        manager.start(profileId)
+        fakeBikeDataSource.setMetrics(cadenceRpm = 90, resistancePercent = 50, powerWatts = 150)
+        advanceTimeBy(1_000)
+        runCurrent()
+
+        assertEquals(null, values.last().currentZone)
+    }
+
+    @Test
+    fun `currentZone reflects live power as a fraction of the active profile's FTP`() = runTest {
+        val ftpProfileId = profileRepository.createProfile(
+            Profile(name = "Zoned", avatarEmoji = "🚴", avatarColor = 0xFF00AAFF.toInt(), weightKg = null, ftp = 200),
+        )
+        activeProfileHolder.setActiveProfile(ftpProfileId)
+        val manager = RideSessionManager(fakeBikeDataSource, rideRepository, backgroundScope)
+        val viewModel = InRideViewModel(manager, fakeBikeDataSource, profileRepository, activeProfileHolder)
+
+        manager.start(ftpProfileId)
+        // 190W / 200W FTP = 95% -> Threshold zone (91-105%).
+        fakeBikeDataSource.setMetrics(cadenceRpm = 90, resistancePercent = 50, powerWatts = 190)
+
+        // A genuine suspend await (not the launch+runCurrent pattern used elsewhere in this
+        // file) because ftp is sourced from a Room @Query Flow (profileRepository.observeProfiles()),
+        // whose first real emission isn't guaranteed to land within a single runCurrent()
+        // window the way this view model's other, purely in-memory inputs are.
+        val state = viewModel.uiState.first { it.ftp != null }
+
+        assertEquals(PowerZone.THRESHOLD, state.currentZone)
+    }
+
+    @Test
+    fun `currentZone is null while sensors are disconnected`() = runTest {
+        val ftpProfileId = profileRepository.createProfile(
+            Profile(name = "Zoned", avatarEmoji = "🚴", avatarColor = 0xFF00AAFF.toInt(), weightKg = null, ftp = 200),
+        )
+        activeProfileHolder.setActiveProfile(ftpProfileId)
+        val manager = RideSessionManager(fakeBikeDataSource, rideRepository, backgroundScope)
+        val viewModel = InRideViewModel(manager, fakeBikeDataSource, profileRepository, activeProfileHolder)
+        val values = mutableListOf<InRideUiState>()
+        backgroundScope.launch { viewModel.uiState.collect { values.add(it) } }
+        runCurrent()
+
+        manager.start(ftpProfileId)
+        fakeBikeDataSource.setMetrics(cadenceRpm = 90, resistancePercent = 50, powerWatts = 190)
+        fakeBikeDataSource.setConnectionState(ConnectionState.Disconnected)
+        advanceTimeBy(1_000)
+        runCurrent()
+
+        assertEquals(null, values.last().currentZone)
+    }
+
+    // --- Ride goals (T13/#13) ----------------------------------------------------------------
+
+    @Test
+    fun `goalProgress is null when no goal is set`() = runTest {
+        val manager = RideSessionManager(fakeBikeDataSource, rideRepository, backgroundScope)
+        val viewModel = InRideViewModel(manager, fakeBikeDataSource, profileRepository, activeProfileHolder)
+        val values = mutableListOf<InRideUiState>()
+        backgroundScope.launch { viewModel.uiState.collect { values.add(it) } }
+        runCurrent()
+
+        manager.start(profileId)
+        advanceTimeBy(1_000)
+        runCurrent()
+
+        assertEquals(null, values.last().goalProgress)
+    }
+
+    @Test
+    fun `goalProgress tracks elapsed time toward a Duration goal`() = runTest {
+        val manager = RideSessionManager(fakeBikeDataSource, rideRepository, backgroundScope)
+        val viewModel = InRideViewModel(manager, fakeBikeDataSource, profileRepository, activeProfileHolder)
+        val values = mutableListOf<InRideUiState>()
+        backgroundScope.launch { viewModel.uiState.collect { values.add(it) } }
+        runCurrent()
+
+        manager.setGoal(RideGoal.Duration(targetSec = 10))
+        manager.start(profileId)
+        advanceTimeBy(5_000)
+        runCurrent()
+
+        assertEquals(0.5, values.last().goalProgress!!, 0.0001)
+    }
+
+    @Test
+    fun `goalProgress tracks output toward an Output goal and clamps at 1_0`() = runTest {
+        val manager = RideSessionManager(fakeBikeDataSource, rideRepository, backgroundScope)
+        val viewModel = InRideViewModel(manager, fakeBikeDataSource, profileRepository, activeProfileHolder)
+        val values = mutableListOf<InRideUiState>()
+        backgroundScope.launch { viewModel.uiState.collect { values.add(it) } }
+        runCurrent()
+
+        manager.setGoal(RideGoal.Output(targetKj = 0.5))
+        manager.start(profileId)
+        // 3 seconds at 200W = 600 joules = 0.6 kJ, over a 0.5 kJ goal -> clamped to 1.0.
+        fakeBikeDataSource.setMetrics(cadenceRpm = 90, resistancePercent = 50, powerWatts = 200)
+        advanceTimeBy(3_000)
+        runCurrent()
+
+        assertEquals(1.0, values.last().goalProgress!!, 0.0001)
     }
 }

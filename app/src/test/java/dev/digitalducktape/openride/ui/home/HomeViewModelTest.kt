@@ -11,6 +11,7 @@ import dev.digitalducktape.openride.core.data.ProfileRepository
 import dev.digitalducktape.openride.core.data.RideRepository
 import dev.digitalducktape.openride.core.profile.ActiveProfileHolder
 import dev.digitalducktape.openride.core.ride.FakeBikeDataSource
+import dev.digitalducktape.openride.core.ride.RideGoal
 import dev.digitalducktape.openride.core.ride.RideSessionManager
 import dev.digitalducktape.openride.core.ride.RideSessionState
 import kotlinx.coroutines.flow.first
@@ -93,5 +94,18 @@ class HomeViewModelTest {
         val active = viewModel.activeProfile.first { it != null }
 
         assertEquals("Ed", active?.name)
+    }
+
+    @Test
+    fun `goal defaults to None and setGoal delegates to the session manager`() = runTest {
+        val manager = RideSessionManager(FakeBikeDataSource(), rideRepository, backgroundScope)
+        val viewModel = HomeViewModel(activeProfileHolder, profileRepository, manager)
+
+        assertEquals(RideGoal.None, viewModel.goal.value)
+
+        viewModel.setGoal(RideGoal.Duration(targetSec = 900))
+
+        assertEquals(RideGoal.Duration(900), viewModel.goal.value)
+        assertEquals(RideGoal.Duration(900), manager.goal.value)
     }
 }
