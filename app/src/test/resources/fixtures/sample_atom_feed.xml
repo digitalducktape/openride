@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns:media="http://search.yahoo.com/mrss/" xmlns="http://www.w3.org/2005/Atom">
+ <link rel="self" href="http://www.youtube.com/feeds/videos.xml?channel_id=UCTestChannel00000000"/>
+ <id>yt:channel:TestChannel00000000</id>
+ <yt:channelId>UCTestChannel00000000</yt:channelId>
+ <title>Test Cycling Channel</title>
+ <link rel="alternate" href="https://www.youtube.com/channel/UCTestChannel00000000"/>
+ <author>
+  <name>Test Cycling Channel</name>
+  <uri>https://www.youtube.com/channel/UCTestChannel00000000</uri>
+ </author>
+ <published>2020-01-01T00:00:00+00:00</published>
+ <entry>
+  <id>yt:video:testVideoOne1</id>
+  <yt:videoId>testVideoOne1</yt:videoId>
+  <yt:channelId>UCTestChannel00000000</yt:channelId>
+  <title>Test Ride One - Scenic Loop</title>
+  <link rel="alternate" href="https://www.youtube.com/watch?v=testVideoOne1"/>
+  <author>
+   <name>Test Cycling Channel</name>
+   <uri>https://www.youtube.com/channel/UCTestChannel00000000</uri>
+  </author>
+  <published>2024-03-10T11:00:00+00:00</published>
+  <updated>2024-03-11T06:00:00+00:00</updated>
+  <media:group>
+   <media:title>Test Ride One - Scenic Loop</media:title>
+   <media:content url="https://www.youtube.com/v/testVideoOne1?version=3" type="application/x-shockwave-flash" width="640" height="390"/>
+   <media:thumbnail url="https://i1.ytimg.com/vi/testVideoOne1/hqdefault.jpg" width="480" height="360"/>
+   <media:description>Placeholder description for a fixture video used in unit tests only.</media:description>
+   <media:community>
+    <media:starRating count="10" average="5.0" min="1" max="5"/>
+    <media:statistics views="100"/>
+   </media:community>
+  </media:group>
+ </entry>
+ <entry>
+  <id>yt:video:testVideoTwo2</id>
+  <yt:videoId>testVideoTwo2</yt:videoId>
+  <yt:channelId>UCTestChannel00000000</yt:channelId>
+  <title>Test Ride Two - Interval Session</title>
+  <link rel="alternate" href="https://www.youtube.com/watch?v=testVideoTwo2"/>
+  <author>
+   <name>Test Cycling Channel</name>
+   <uri>https://www.youtube.com/channel/UCTestChannel00000000</uri>
+  </author>
+  <published>2024-02-01T09:30:00+00:00</published>
+  <updated>2024-02-01T09:30:00+00:00</updated>
+  <media:group>
+   <media:title>Test Ride Two - Interval Session</media:title>
+   <media:content url="https://www.youtube.com/v/testVideoTwo2?version=3" type="application/x-shockwave-flash" width="640" height="390"/>
+   <media:thumbnail url="https://i1.ytimg.com/vi/testVideoTwo2/hqdefault.jpg" width="480" height="360"/>
+   <media:description>Placeholder description for a fixture video used in unit tests only.</media:description>
+   <media:community>
+    <media:starRating count="5" average="4.5" min="1" max="5"/>
+    <media:statistics views="50"/>
+   </media:community>
+  </media:group>
+ </entry>
+ <entry>
+  <id>yt:video:noThumbVideo3</id>
+  <yt:videoId>noThumbVideo3</yt:videoId>
+  <yt:channelId>UCTestChannel00000000</yt:channelId>
+  <title>Test Ride Three - No Thumbnail Element</title>
+  <link rel="alternate" href="https://www.youtube.com/watch?v=noThumbVideo3"/>
+  <published>2024-01-15T08:00:00+00:00</published>
+  <media:group>
+   <media:title>Test Ride Three - No Thumbnail Element</media:title>
+  </media:group>
+ </entry>
+</feed>

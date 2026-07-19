@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.room.Room
+import dev.digitalducktape.openride.core.content.YouTubeContentRepository
 import dev.digitalducktape.openride.core.data.OpenRideDatabase
 import dev.digitalducktape.openride.core.data.ProfileRepository
 import dev.digitalducktape.openride.core.data.RideRepository
@@ -58,6 +59,11 @@ class AppContainer(private val applicationContext: Context) {
     /** Scopes the session to whichever rider is currently selected (PRD P0-3). */
     val activeProfileHolder: ActiveProfileHolder by lazy {
         ActiveProfileHolder(applicationContext)
+    }
+
+    /** Curated YouTube-channel content for the Classes browser (PRD P0-6, T9/T10). */
+    val contentRepository: YouTubeContentRepository by lazy {
+        YouTubeContentRepository(applicationContext)
     }
 }
 
