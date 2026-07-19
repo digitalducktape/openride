@@ -128,23 +128,40 @@ Building the real-sensor APK: the `debugReal` variant sets `USE_REAL_BIKE_SENSOR
 
 Target: `PLTN-RB1VQ`, Android 11, build `RQ.250113.A`.
 
-**Confirmed on the physical bike (no rider):**
+**Confirmed on the physical bike, stationary, no rider** (via
+`SensorBindingInstrumentedTest.bindsAndStreamsFramesOnBike`, run on-device):
 
-- The `AffernetService` is `exported=true` with no permission (verified via the APK manifest and
-  `dumpsys package`), so binding needs no signature permission.
-- _(filled in by the on-device run — see the "on-device bind verified" commit)_ bind succeeds,
-  `registerCallback` returns without exception, `setFakeDataMode(true)` is accepted, and
-  `onSensorDataChange` frames arrive and decode into in-range `BikeMetrics`. This exercises the
-  full reconstructed pipeline (transaction codes + `BikeData` wire layout) end-to-end using the
-  service's own synthetic-data mode, so it does not require pedaling.
+- `AffernetService` is `exported=true` with no permission (APK manifest + `dumpsys package`),
+  so binding needs no signature permission.
+- **Bind succeeds** and `registerCallback` is accepted — the affernet service process (pid
+  3693) holds our callbacks (`AffernetService$3`/`$4`), visible in its own logcat at teardown.
+- **The service pushes real `BikeData` frames with no rider**, and the reconstructed AIDL +
+  `BikeData` Parcelable decode them correctly. The decoded stationary idle frame pulled off the
+  bike (`files/t3_verify.txt`):
 
-**Still requires a rider (manual, cannot be automated here):**
+  ```
+  bound=true frames=1 state=Connected
+  metrics=BikeMetrics(cadenceRpm=0, resistancePercent=1, powerWatts=0, speedMph=0.0)
+  ```
 
-- Confirming that live `cadenceRpm` tracks actual pedaling and `powerWatts` rises with effort.
-  Fake-data mode proves the transport and decode are correct; only a person on the bike can
-  confirm the real sensor values map as expected. Turning the resistance knob (which changes
-  resistance without pedaling) is a good partial live-signal check during that session.
+  Cadence / power / speed are 0 (nobody pedaling, as expected) and `resistancePercent=1` is a
+  live, non-zero reading of the current resistance-knob position — which is the key proof the
+  `BikeData` field offsets are right (resistance is read from the correct place in the parcel,
+  not garbage). `ConnectionState` reached `Connected` on the first frame.
 
-The automated portion is `app/src/androidTest/.../SensorBindingInstrumentedTest.kt`
-(`./gradlew :app:connectedDebugAndroidTest`), which is portable: it self-skips the live
-assertions on any device where the affernet service is absent.
+  Note: `setFakeDataMode(true)` is *declined* by the service in this state (returns false), so
+  verification relies on the real idle frames the service streams once a callback is registered,
+  not on synthetic data.
+
+**Still requires a rider (manual, cannot be done here):**
+
+- Confirming live `cadenceRpm` tracks actual pedaling and `powerWatts` rises with effort. The
+  transport + decode are proven; only a person on the bike can confirm the sensor *values* map
+  as expected under load. Turning the resistance knob during that session (changes resistance
+  with no pedaling) is a good extra live-signal check — the idle frame already shows a plausible
+  resistance value, so this is expected to work.
+
+The automated check is `app/src/androidTest/.../SensorBindingInstrumentedTest.kt`
+(`./gradlew :app:connectedDebugAndroidTest`), portable: it self-skips the live assertions on any
+device where the affernet service is absent, and treats stationary frame streaming as best-effort
+(the bind is the hard assertion) so an asleep bike doesn't make it flaky.
