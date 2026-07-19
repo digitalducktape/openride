@@ -20,7 +20,10 @@ import java.util.Locale
  * Includes the full per-second [RideSample] series as `<Trackpoint>` elements (PRD P0-5's
  * time-series architecture requirement) — cadence uses the base schema's own `<Cadence>`
  * element (valid for biking activities per the TCX schema), while power/speed use the
- * standard `TPX`/`LX` extensions Garmin devices themselves emit for bike data.
+ * standard `TPX`/`LX` extensions Garmin devices themselves emit for bike data. Heart rate
+ * (PRD P1-4, T17 — optional, only present when a BLE strap was paired for that ride) uses the
+ * base schema's own `<HeartRateBpm>` element and is omitted entirely for samples/rides with
+ * none, rather than emitting a fabricated zero.
  *
  * Distance/speed have no dedicated field on [Ride]/[RideSample] (only cadence/resistance/
  * power are persisted) — they're reconstructed here the same way the live ride screen derives
@@ -51,6 +54,7 @@ object TcxExporter {
                     cadence = sample.cadence,
                     power = sample.power,
                     speedMetersPerSec = speedMetersPerSec,
+                    heartRateBpm = sample.heartRateBpm,
                 ),
             )
         }
@@ -90,10 +94,17 @@ ${trackpoints}        </Track>
         cadence: Int,
         power: Int,
         speedMetersPerSec: Double,
-    ): String = """        <Trackpoint>
+        heartRateBpm: Int?,
+    ): String {
+        val heartRateXml = if (heartRateBpm != null) {
+            "\n          <HeartRateBpm><Value>$heartRateBpm</Value></HeartRateBpm>"
+        } else {
+            ""
+        }
+        return """        <Trackpoint>
           <Time>$time</Time>
           <DistanceMeters>${decimal(distanceMeters)}</DistanceMeters>
-          <Cadence>${cadence.coerceIn(0, 254)}</Cadence>
+          <Cadence>${cadence.coerceIn(0, 254)}</Cadence>$heartRateXml
           <Extensions>
             <TPX xmlns="http://www.garmin.com/xmlschemas/ActivityExtension/v2">
               <Watts>$power</Watts>
@@ -102,6 +113,7 @@ ${trackpoints}        </Track>
           </Extensions>
         </Trackpoint>
 """
+    }
 
     /** Locale-independent (always `.`-decimal) formatting — the device's locale must never
      * flip this to a comma, which would silently break every TCX/FIT-import bridge's parser. */

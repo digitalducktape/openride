@@ -9,6 +9,9 @@ import androidx.room.ForeignKey
  * history query — no separate index is needed since `rideId` is the leading PK column.
  *
  * @param tSec seconds elapsed since the ride started (0-based)
+ * @param heartRateBpm optional live heart rate at this second (PRD P1-4, T17), from a paired
+ *   BLE strap. Added in schema version 2 ([dev.digitalducktape.openride.core.data.MIGRATION_1_2]);
+ *   `null` both for samples recorded before T17 and for any ride where no strap was paired.
  */
 @Entity(
     tableName = "ride_samples",
@@ -28,4 +31,5 @@ data class RideSample(
     val cadence: Int,
     val resistance: Int,
     val power: Int,
+    val heartRateBpm: Int? = null,
 )

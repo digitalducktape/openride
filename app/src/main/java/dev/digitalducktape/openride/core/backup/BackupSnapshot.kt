@@ -19,6 +19,7 @@ data class ProfileBackup(
     val avatarColor: Int,
     val weightKg: Double?,
     val ftp: Int?,
+    val pairedHrDeviceAddress: String? = null,
 )
 
 @Serializable
@@ -43,10 +44,11 @@ data class RideSampleBackup(
     val cadence: Int,
     val resistance: Int,
     val power: Int,
+    val heartRateBpm: Int? = null,
 )
 
-fun Profile.toBackup() = ProfileBackup(id, name, avatarEmoji, avatarColor, weightKg, ftp)
-fun ProfileBackup.toEntity() = Profile(id, name, avatarEmoji, avatarColor, weightKg, ftp)
+fun Profile.toBackup() = ProfileBackup(id, name, avatarEmoji, avatarColor, weightKg, ftp, pairedHrDeviceAddress)
+fun ProfileBackup.toEntity() = Profile(id, name, avatarEmoji, avatarColor, weightKg, ftp, pairedHrDeviceAddress)
 
 fun Ride.toBackup() = RideBackup(
     id, profileId, startEpochMs, durationSec, avgCadence, maxCadence, avgPower, maxPower, avgResistance, outputKj, calories,
@@ -55,8 +57,8 @@ fun RideBackup.toEntity() = Ride(
     id, profileId, startEpochMs, durationSec, avgCadence, maxCadence, avgPower, maxPower, avgResistance, outputKj, calories,
 )
 
-fun RideSample.toBackup() = RideSampleBackup(rideId, tSec, cadence, resistance, power)
-fun RideSampleBackup.toEntity() = RideSample(rideId, tSec, cadence, resistance, power)
+fun RideSample.toBackup() = RideSampleBackup(rideId, tSec, cadence, resistance, power, heartRateBpm)
+fun RideSampleBackup.toEntity() = RideSample(rideId, tSec, cadence, resistance, power, heartRateBpm)
 
 /**
  * A full-database snapshot (PRD P1-8): every profile, ride, and per-second sample, plus a

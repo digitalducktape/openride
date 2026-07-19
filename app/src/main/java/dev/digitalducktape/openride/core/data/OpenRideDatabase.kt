@@ -2,10 +2,11 @@ package dev.digitalducktape.openride.core.data
 
 import androidx.room.Database
 import androidx.room.RoomDatabase
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [Profile::class, Ride::class, RideSample::class],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 abstract class OpenRideDatabase : RoomDatabase() {
@@ -14,5 +15,19 @@ abstract class OpenRideDatabase : RoomDatabase() {
 
     companion object {
         const val DATABASE_NAME = "openride.db"
+    }
+}
+
+/**
+ * Adds BLE heart-rate support (PRD P1-4, T17): a per-rider paired-strap address on
+ * [Profile], and a per-second optional heart rate reading on [RideSample]. Both are nullable
+ * columns with no default-value backfill needed — every existing row simply reads back
+ * `null` (no strap paired / no HR recorded), which is exactly the "not paired yet" state for
+ * data that predates this feature.
+ */
+val MIGRATION_1_2 = object : androidx.room.migration.Migration(1, 2) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE profiles ADD COLUMN pairedHrDeviceAddress TEXT")
+        db.execSQL("ALTER TABLE ride_samples ADD COLUMN heartRateBpm INTEGER")
     }
 }
