@@ -36,9 +36,11 @@ import dev.digitalducktape.openride.ui.common.ExportShare
 import kotlinx.coroutines.launch
 
 /**
- * Profile nav tab: shows the active rider, offers "Switch rider" (PRD P0-3, clears the
- * active profile and returns to profile select), quick shortcuts to stock Android Wi-Fi/
- * device settings (PRD P1-5, T12), and whole-database backup/restore (PRD P1-8, T15).
+ * Profile nav tab: shows the active rider, offers "Switch rider" (PRD P0-3/P1-6 — tap-to-
+ * confirm before clearing the active profile and returning to profile select, so a stray tap
+ * mid-session can't silently log the next ride under the wrong rider), quick shortcuts to
+ * stock Android Wi-Fi/device settings (PRD P1-5, T12), and whole-database backup/restore
+ * (PRD P1-8, T15).
  */
 @Composable
 fun ProfileTabScreen(
@@ -53,6 +55,7 @@ fun ProfileTabScreen(
 
     var pendingRestoreContent by remember { mutableStateOf<String?>(null) }
     var restoreError by remember { mutableStateOf<String?>(null) }
+    var showSwitchConfirmation by remember { mutableStateOf(false) }
 
     val pickBackupFile = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -100,10 +103,7 @@ fun ProfileTabScreen(
             }
 
             OutlinedButton(
-                onClick = {
-                    viewModel.switchRider()
-                    onSwitchRider()
-                },
+                onClick = { showSwitchConfirmation = true },
                 modifier = Modifier.width(280.dp).padding(top = 32.dp),
             ) {
                 Text("Switch rider")
@@ -142,6 +142,32 @@ fun ProfileTabScreen(
                 )
             }
         }
+    }
+
+    // Tap-to-confirm (PRD P1-6/T16): a stray tap on "Switch rider" shouldn't silently drop the
+    // active profile mid-session — the whole point is that the *next* ride logged shouldn't
+    // land under the wrong rider by accident.
+    if (showSwitchConfirmation) {
+        val riderName = activeProfile?.name ?: "the current rider"
+        AlertDialog(
+            onDismissRequest = { showSwitchConfirmation = false },
+            title = { Text("Switch rider?") },
+            text = { Text("You'll leave $riderName's session. Any ride you start next will be logged under whichever rider you pick.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showSwitchConfirmation = false
+                    viewModel.switchRider()
+                    onSwitchRider()
+                }) {
+                    Text("Switch rider")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSwitchConfirmation = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
     }
 
     // Destructive confirmation (tap-to-confirm, matching the End Ride pattern elsewhere in the
