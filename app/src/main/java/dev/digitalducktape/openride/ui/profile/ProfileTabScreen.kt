@@ -23,8 +23,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
- * Profile nav tab: shows the active rider and offers "Switch rider" (PRD P0-3), which clears
- * the active profile and returns to profile select.
+ * Profile nav tab: shows the active rider, offers "Switch rider" (PRD P0-3, clears the
+ * active profile and returns to profile select), and quick shortcuts to stock Android
+ * Wi-Fi/device settings (PRD P1-5, T12) — relevant once this app is the tablet's launcher.
  */
 @Composable
 fun ProfileTabScreen(
@@ -82,6 +83,8 @@ fun ProfileTabScreen(
             ) {
                 Text("Switch rider")
             }
+
+            SettingsShortcutsRow(modifier = Modifier.padding(top = 16.dp))
         }
     }
 }
