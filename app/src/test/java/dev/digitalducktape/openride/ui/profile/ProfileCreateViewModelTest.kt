@@ -82,4 +82,89 @@ class ProfileCreateViewModelTest {
         assertNotNull(saved)
         assertEquals("Ed", saved!!.name)
     }
+
+    @Test
+    fun `weight and FTP are optional and default to null when left blank`() = runTest {
+        viewModel.onNameChange("Ed")
+
+        viewModel.save()
+
+        val saved = profileRepository.getProfile(activeProfileHolder.activeProfileId.value!!)
+        assertNull(saved!!.weightKg)
+        assertNull(saved.ftp)
+    }
+
+    @Test
+    fun `a non-numeric weight is rejected with an error and nothing is saved`() = runTest {
+        viewModel.onNameChange("Ed")
+        viewModel.onWeightChange("not a number")
+
+        val result = viewModel.save()
+
+        assertTrue(!result)
+        assertNotNull(viewModel.uiState.value.weightError)
+        assertNull(activeProfileHolder.activeProfileId.value)
+    }
+
+    @Test
+    fun `a zero or negative weight is rejected with an error`() = runTest {
+        viewModel.onNameChange("Ed")
+        viewModel.onWeightChange("0")
+
+        val result = viewModel.save()
+
+        assertTrue(!result)
+        assertNotNull(viewModel.uiState.value.weightError)
+    }
+
+    @Test
+    fun `a non-numeric FTP is rejected with an error and nothing is saved`() = runTest {
+        viewModel.onNameChange("Ed")
+        viewModel.onFtpChange("lots")
+
+        val result = viewModel.save()
+
+        assertTrue(!result)
+        assertNotNull(viewModel.uiState.value.ftpError)
+        assertNull(activeProfileHolder.activeProfileId.value)
+    }
+
+    @Test
+    fun `valid weight and FTP are parsed and saved`() = runTest {
+        viewModel.onNameChange("Ed")
+        viewModel.onWeightChange("80.5")
+        viewModel.onFtpChange("220")
+
+        val result = viewModel.save()
+
+        assertTrue(result)
+        val saved = profileRepository.getProfile(activeProfileHolder.activeProfileId.value!!)
+        assertEquals(80.5, saved!!.weightKg!!, 0.0001)
+        assertEquals(220, saved.ftp)
+    }
+
+    @Test
+    fun `changing the weight clears a previous weight error`() = runTest {
+        viewModel.onNameChange("Ed")
+        viewModel.onWeightChange("bad")
+        viewModel.save()
+        assertNotNull(viewModel.uiState.value.weightError)
+
+        viewModel.onWeightChange("70")
+
+        assertNull(viewModel.uiState.value.weightError)
+    }
+
+    @Test
+    fun `selecting an avatar color and emoji persists them on the saved profile`() = runTest {
+        viewModel.onNameChange("Ed")
+        viewModel.onAvatarColorChange(AvatarOptions.colors[2])
+        viewModel.onAvatarEmojiChange(AvatarOptions.emojis[3])
+
+        viewModel.save()
+
+        val saved = profileRepository.getProfile(activeProfileHolder.activeProfileId.value!!)
+        assertEquals(AvatarOptions.colors[2], saved!!.avatarColor)
+        assertEquals(AvatarOptions.emojis[3], saved.avatarEmoji)
+    }
 }

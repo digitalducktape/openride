@@ -22,6 +22,7 @@ import dev.digitalducktape.openride.ui.classes.ClassesScreen
 import dev.digitalducktape.openride.ui.history.HistoryScreen
 import dev.digitalducktape.openride.ui.home.HomeScreen
 import dev.digitalducktape.openride.ui.home.HomeViewModel
+import dev.digitalducktape.openride.ui.navigation.Destinations
 import dev.digitalducktape.openride.ui.navigation.MainTabs
 import dev.digitalducktape.openride.ui.profile.ProfileTabScreen
 import dev.digitalducktape.openride.ui.profile.ProfileTabViewModel
@@ -94,9 +95,7 @@ fun MainScaffold(
                 )
                 HomeScreen(
                     viewModel = viewModel,
-                    onQuickStart = {
-                        outerNavController.navigate(dev.digitalducktape.openride.ui.navigation.Destinations.InRide)
-                    },
+                    onQuickStart = { outerNavController.navigate(Destinations.InRide) },
                 )
             }
             composable(MainTabs.Classes) {
@@ -111,7 +110,14 @@ fun MainScaffold(
                         ProfileTabViewModel(appContainer.activeProfileHolder, appContainer.profileRepository)
                     },
                 )
-                ProfileTabScreen(viewModel = viewModel)
+                ProfileTabScreen(
+                    viewModel = viewModel,
+                    onSwitchRider = {
+                        outerNavController.navigate(Destinations.ProfileSelect) {
+                            popUpTo(Destinations.Main) { inclusive = true }
+                        }
+                    },
+                )
             }
         }
     }

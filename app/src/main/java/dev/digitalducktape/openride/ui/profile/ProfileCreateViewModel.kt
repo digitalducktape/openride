@@ -9,14 +9,18 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * Create-profile form state. Weight/FTP fields and the avatar picker land in T6 — this T11
- * version covers just the name-required flow so "Add rider" is wired end-to-end.
+ * Create-profile form state (PRD P0-3: name + avatar required, weight/FTP optional — used
+ * for calorie estimates, power zones P1-3, and export accuracy P1-1).
  */
 data class ProfileCreateUiState(
     val name: String = "",
     val nameError: String? = null,
     val avatarEmoji: String = AvatarOptions.defaultEmoji,
     val avatarColor: Int = AvatarOptions.defaultColor,
+    val weightKgInput: String = "",
+    val weightError: String? = null,
+    val ftpInput: String = "",
+    val ftpError: String? = null,
     val saved: Boolean = false,
 )
 
@@ -31,10 +35,28 @@ class ProfileCreateViewModel(
         _uiState.value = _uiState.value.copy(name = name, nameError = null)
     }
 
+    fun onAvatarEmojiChange(emoji: String) {
+        _uiState.value = _uiState.value.copy(avatarEmoji = emoji)
+    }
+
+    fun onAvatarColorChange(color: Int) {
+        _uiState.value = _uiState.value.copy(avatarColor = color)
+    }
+
+    fun onWeightChange(weightKg: String) {
+        _uiState.value = _uiState.value.copy(weightKgInput = weightKg, weightError = null)
+    }
+
+    fun onFtpChange(ftp: String) {
+        _uiState.value = _uiState.value.copy(ftpInput = ftp, ftpError = null)
+    }
+
     /**
-     * Validates the name (required, non-blank) and, if valid, persists the new profile and
-     * sets it active, returning `true`. Returns `false` (surfacing
-     * [ProfileCreateUiState.nameError]) on invalid input without touching the repository.
+     * Validates the form and, if valid, persists the new profile and sets it active,
+     * returning `true`. Name is required (non-blank); weight (kg, positive decimal) and FTP
+     * (watts, positive whole number) are optional but must be well-formed if provided.
+     * Returns `false` on the first invalid field, surfacing the relevant `*Error` in
+     * [ProfileCreateUiState] without touching the repository.
      *
      * A plain `suspend fun` rather than an internally-launched coroutine, so it can be
      * driven directly from `runTest` in tests and from `rememberCoroutineScope()` in the
@@ -45,8 +67,35 @@ class ProfileCreateViewModel(
     suspend fun save(): Boolean {
         val current = _uiState.value
         val trimmedName = current.name.trim()
+
+        var next = current
+        var valid = true
+
         if (trimmedName.isBlank()) {
-            _uiState.value = current.copy(nameError = "Name is required")
+            next = next.copy(nameError = "Name is required")
+            valid = false
+        }
+
+        val weightKg: Double? = when {
+            current.weightKgInput.isBlank() -> null
+            else -> current.weightKgInput.toDoubleOrNull()?.takeIf { it > 0.0 } ?: run {
+                next = next.copy(weightError = "Enter a weight in kg greater than 0")
+                valid = false
+                null
+            }
+        }
+
+        val ftp: Int? = when {
+            current.ftpInput.isBlank() -> null
+            else -> current.ftpInput.toIntOrNull()?.takeIf { it > 0 } ?: run {
+                next = next.copy(ftpError = "Enter an FTP in watts greater than 0")
+                valid = false
+                null
+            }
+        }
+
+        if (!valid) {
+            _uiState.value = next
             return false
         }
 
@@ -55,8 +104,8 @@ class ProfileCreateViewModel(
                 name = trimmedName,
                 avatarEmoji = current.avatarEmoji,
                 avatarColor = current.avatarColor,
-                weightKg = null,
-                ftp = null,
+                weightKg = weightKg,
+                ftp = ftp,
             ),
         )
         activeProfileHolder.setActiveProfile(id)

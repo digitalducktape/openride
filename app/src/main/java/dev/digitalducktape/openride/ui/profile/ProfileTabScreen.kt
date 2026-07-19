@@ -6,8 +6,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,12 +23,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
- * Profile nav tab, minimal T11 version: shows the active rider. "Switch rider" (T6's job)
- * hangs off [ProfileTabViewModel.activeProfile] already exposing what it needs.
+ * Profile nav tab: shows the active rider and offers "Switch rider" (PRD P0-3), which clears
+ * the active profile and returns to profile select.
  */
 @Composable
 fun ProfileTabScreen(
     viewModel: ProfileTabViewModel,
+    onSwitchRider: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val activeProfile by viewModel.activeProfile.collectAsState(initial = null)
@@ -55,6 +58,30 @@ fun ProfileTabScreen(
                 color = MaterialTheme.colorScheme.onBackground,
                 modifier = Modifier.padding(top = 16.dp),
             )
+            activeProfile?.let { profile ->
+                val details = buildList {
+                    profile.weightKg?.let { add("${it} kg") }
+                    profile.ftp?.let { add("FTP ${it}W") }
+                }
+                if (details.isNotEmpty()) {
+                    Text(
+                        text = details.joinToString("  •  "),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
+            }
+
+            OutlinedButton(
+                onClick = {
+                    viewModel.switchRider()
+                    onSwitchRider()
+                },
+                modifier = Modifier.width(280.dp).padding(top = 32.dp),
+            ) {
+                Text("Switch rider")
+            }
         }
     }
 }
