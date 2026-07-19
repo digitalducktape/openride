@@ -146,6 +146,11 @@ fun MainScaffold(
                             popUpTo(Destinations.Main) { inclusive = true }
                         }
                     },
+                    onManageHeartRateStrap = {
+                        // Lives in the outer nav graph (see OpenRideNavHost), same reasoning as
+                        // "switch rider": pairing is a full-screen flow, not a fifth tab.
+                        outerNavController.navigate(Destinations.HrPairing)
+                    },
                 )
             }
         }

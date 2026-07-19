@@ -3,6 +3,7 @@ package dev.digitalducktape.openride.ui.ride
 import androidx.lifecycle.ViewModel
 import dev.digitalducktape.openride.core.data.ProfileRepository
 import dev.digitalducktape.openride.core.data.Ride
+import dev.digitalducktape.openride.core.heartrate.HeartRateManager
 import dev.digitalducktape.openride.core.profile.ActiveProfileHolder
 import dev.digitalducktape.openride.core.ride.LiveAggregates
 import dev.digitalducktape.openride.core.ride.PowerZone
@@ -14,6 +15,7 @@ import dev.digitalducktape.openride.core.sensor.BikeMetrics
 import dev.digitalducktape.openride.core.sensor.ConnectionState
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.scan
 
@@ -27,6 +29,13 @@ import kotlinx.coroutines.flow.scan
  *   zero reading.
  * @param goal the rider's pre-ride target (PRD P1-3), or [RideGoal.None].
  * @param ftp the active rider's FTP in watts, or `null` if not set — drives [currentZone].
+ * @param heartRateBpm live bpm from the active profile's paired strap (PRD P1-4, T17), or
+ *   `null` if either no strap is paired or it hasn't delivered a reading yet.
+ * @param heartRatePaired whether the active profile has a strap paired at all — distinct
+ *   from [heartRateBpm] being non-null, since a paired-but-not-yet-connected strap should
+ *   still show its tile (as "--"), not hide it entirely.
+ * @param heartRateConnectionState the paired strap's live connection state, `Unavailable` if
+ *   none is paired.
  */
 data class InRideUiState(
     val elapsedSec: Int = 0,
@@ -37,9 +46,19 @@ data class InRideUiState(
     val distanceMiles: Double = 0.0,
     val goal: RideGoal = RideGoal.None,
     val ftp: Int? = null,
+    val heartRateBpm: Int? = null,
+    val heartRatePaired: Boolean = false,
+    val heartRateConnectionState: ConnectionState = ConnectionState.Unavailable,
 ) {
     val sensorsAvailable: Boolean get() = connectionState == ConnectionState.Connected
     val isPaused: Boolean get() = sessionState == RideSessionState.Paused
+
+    /** Whether the BPM tile should be shown at all (PRD P1-4, T17) — only once a strap is
+     *  paired for the active rider, regardless of whether it's currently connected. */
+    val heartRateTileVisible: Boolean get() = heartRatePaired
+
+    /** Whether the paired strap is actually live right now (vs. paired but not yet connected). */
+    val heartRateConnected: Boolean get() = heartRateConnectionState == ConnectionState.Connected
 
     /**
      * Live running output in kilojoules. `avgPower * elapsedSec` reconstructs the summed
@@ -77,6 +96,7 @@ class InRideViewModel(
     private val bikeDataSource: BikeDataSource,
     profileRepository: ProfileRepository,
     activeProfileHolder: ActiveProfileHolder,
+    private val heartRateManager: HeartRateManager? = null,
 ) : ViewModel() {
     // profileRepository.observeProfiles() is backed by a Room @Query Flow, which (unlike the
     // rest of this view model's plain in-memory StateFlows) doesn't necessarily emit its first
@@ -98,11 +118,28 @@ class InRideViewModel(
         CoreRideFlow(elapsedSec, sessionState, metrics, aggregates, connectionState)
     }
 
+    // Live heart rate from the active profile's paired strap (PRD P1-4, T17). When no manager
+    // is wired (tests, or a build without the BLE layer), this is a single static "no strap"
+    // snapshot so the combine below still emits and the HR tile simply stays hidden.
+    private val heartRateFlow: Flow<HeartRateSnapshot> =
+        if (heartRateManager == null) {
+            flowOf(HeartRateSnapshot(bpm = null, paired = false, state = ConnectionState.Unavailable))
+        } else {
+            combine(
+                heartRateManager.bpm,
+                heartRateManager.connectionState,
+                heartRateManager.connectedAddress,
+            ) { bpm, state, address ->
+                HeartRateSnapshot(bpm = bpm, paired = address != null, state = state)
+            }
+        }
+
     val uiState: Flow<InRideUiState> = combine(
         coreFlow,
         rideSessionManager.goal,
         ftpFlow,
-    ) { core, goal, ftp ->
+        heartRateFlow,
+    ) { core, goal, ftp, hr ->
         InRideUiState(
             elapsedSec = core.elapsedSec,
             sessionState = core.sessionState,
@@ -111,6 +148,9 @@ class InRideViewModel(
             connectionState = core.connectionState,
             goal = goal,
             ftp = ftp,
+            heartRateBpm = hr.bpm,
+            heartRatePaired = hr.paired,
+            heartRateConnectionState = hr.state,
         )
     }.scan(InRideUiState()) { previous, next ->
         // Distance has no dedicated field on BikeMetrics/RideSample (PRD only requires
@@ -145,5 +185,11 @@ class InRideViewModel(
         val metrics: BikeMetrics,
         val aggregates: LiveAggregates,
         val connectionState: ConnectionState,
+    )
+
+    private data class HeartRateSnapshot(
+        val bpm: Int?,
+        val paired: Boolean,
+        val state: ConnectionState,
     )
 }

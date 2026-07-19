@@ -5,6 +5,28 @@
          YouTube RSS feeds and loading thumbnails via Coil both need network access. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- BLE heart-rate strap pairing/connection (PRD P1-4, T17). Two permission sets, split by
+         API level (see core/heartrate/BlePermissions.kt):
+
+         - API <=30 (this project's actual target hardware, the Bike Gen 2 tablet on Android
+           11): BLUETOOTH/BLUETOOTH_ADMIN are install-time "normal" permissions here (never
+           requested at runtime); ACCESS_FINE_LOCATION is the runtime permission BLE scanning
+           needs on these levels. maxSdkVersion="30" keeps them out of the merged manifest on
+           API 31+, where they're superseded by the two permissions below.
+         - API 31+ (Android 12+): BLUETOOTH_SCAN/BLUETOOTH_CONNECT are the dedicated runtime
+           BLE permissions. `neverForLocation` on the scan permission is accurate here — this
+           app only scans for the Heart Rate Service UUID, never derives location from scan
+           results — and lets a user on 12+ grant it without also granting location. -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-permission
+        android:name="android.permission.ACCESS_FINE_LOCATION"
+        android:maxSdkVersion="30" />
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+
     <application
         android:allowBackup="true"
         android:icon="@android:drawable/sym_def_app_icon"

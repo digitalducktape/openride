@@ -47,6 +47,7 @@ fun ProfileTabScreen(
     viewModel: ProfileTabViewModel,
     onSwitchRider: () -> Unit,
     onRestoreComplete: () -> Unit,
+    onManageHeartRateStrap: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val activeProfile by viewModel.activeProfile.collectAsState(initial = null)
@@ -110,6 +111,19 @@ fun ProfileTabScreen(
             }
 
             SettingsShortcutsRow(modifier = Modifier.padding(top = 16.dp))
+
+            OutlinedButton(
+                onClick = onManageHeartRateStrap,
+                modifier = Modifier.width(280.dp).padding(top = 16.dp),
+            ) {
+                Text(
+                    if (activeProfile?.pairedHrDeviceAddress != null) {
+                        "Heart-rate strap: paired"
+                    } else {
+                        "Pair heart-rate strap"
+                    },
+                )
+            }
 
             Text(
                 text = "Backup & restore",

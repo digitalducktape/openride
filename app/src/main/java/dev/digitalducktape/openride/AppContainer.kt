@@ -10,6 +10,10 @@ import dev.digitalducktape.openride.core.data.MIGRATION_1_2
 import dev.digitalducktape.openride.core.data.OpenRideDatabase
 import dev.digitalducktape.openride.core.data.ProfileRepository
 import dev.digitalducktape.openride.core.data.RideRepository
+import dev.digitalducktape.openride.core.heartrate.AndroidBleScanner
+import dev.digitalducktape.openride.core.heartrate.BleHeartRateDataSource
+import dev.digitalducktape.openride.core.heartrate.BleScanner
+import dev.digitalducktape.openride.core.heartrate.HeartRateManager
 import dev.digitalducktape.openride.core.profile.ActiveProfileHolder
 import dev.digitalducktape.openride.core.ride.RideSessionManager
 import dev.digitalducktape.openride.core.sensor.BikeDataSource
@@ -67,12 +71,34 @@ class AppContainer(private val applicationContext: Context) {
             bikeDataSource = bikeDataSource,
             rideRepository = rideRepository,
             scope = containerScope,
+            heartRateBpm = heartRateManager.bpm,
         )
     }
 
     /** Scopes the session to whichever rider is currently selected (PRD P0-3). */
     val activeProfileHolder: ActiveProfileHolder by lazy {
         ActiveProfileHolder(applicationContext)
+    }
+
+    /** BLE scanning for nearby heart-rate straps (PRD P1-4, T17), used by the pairing screen. */
+    val bleScanner: BleScanner by lazy {
+        AndroidBleScanner(applicationContext)
+    }
+
+    /**
+     * Connects to whichever BLE strap is paired for the active profile and exposes a single
+     * live bpm/connection-state pair (PRD P1-4, T17). Constructed eagerly from
+     * [MainActivity.onCreate] (not just whenever a screen happens to reference it first) so it
+     * starts observing the active profile the moment the app launches, same reasoning as
+     * [rideSessionManager]'s screen-on observation.
+     */
+    val heartRateManager: HeartRateManager by lazy {
+        HeartRateManager(
+            activeProfileHolder = activeProfileHolder,
+            profileRepository = profileRepository,
+            connectionFactory = { address -> BleHeartRateDataSource(applicationContext, address) },
+            scope = containerScope,
+        )
     }
 
     /** Curated YouTube-channel content for the Classes browser (PRD P0-6, T9/T10). */

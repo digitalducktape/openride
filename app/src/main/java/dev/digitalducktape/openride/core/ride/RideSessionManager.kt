@@ -15,6 +15,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
+/** A no-op heart-rate source: no strap paired, so every sample records a `null` bpm. */
+private val NO_HEART_RATE: StateFlow<Int?> = MutableStateFlow(null).asStateFlow()
+
 /**
  * Drives a single ride from start to finish: `Idle -> Active <-> Paused -> Finished`.
  *
@@ -32,6 +35,12 @@ import kotlinx.coroutines.launch
  *
  * @param scope coroutine scope the 1 Hz ticker runs on. Pass a `TestScope`'s
  *   `backgroundScope` in tests to drive the simulation with virtual time.
+ * @param heartRateBpm live bpm from whichever strap is currently paired (PRD P1-4, T17) —
+ *   sampled into each [RideSample.heartRateBpm] alongside cadence/resistance/power. Defaults
+ *   to a source that's always `null` (no strap), so every existing call site that doesn't
+ *   care about heart rate is unaffected. Production wiring passes
+ *   [dev.digitalducktape.openride.core.heartrate.HeartRateManager.bpm]; tests can pass a
+ *   plain `MutableStateFlow<Int?>`.
  * @param epochMillisProvider supplies the ride's start wall-clock time; injectable so tests
  *   don't depend on real time.
  */
@@ -39,6 +48,7 @@ class RideSessionManager(
     private val bikeDataSource: BikeDataSource,
     private val rideRepository: RideRepository,
     private val scope: CoroutineScope,
+    private val heartRateBpm: StateFlow<Int?> = NO_HEART_RATE,
     private val epochMillisProvider: () -> Long = System::currentTimeMillis,
 ) {
     private val _state = MutableStateFlow<RideSessionState>(RideSessionState.Idle)
@@ -190,6 +200,7 @@ class RideSessionManager(
                         cadence = metrics.cadenceRpm,
                         resistance = metrics.resistancePercent,
                         power = metrics.powerWatts,
+                        heartRateBpm = heartRateBpm.value,
                     ),
                 )
 

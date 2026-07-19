@@ -13,6 +13,9 @@ object Destinations {
     const val Main = "main"
     const val InRide = "in_ride"
 
+    /** BLE heart-rate strap pairing screen (PRD P1-4, T17), reachable from the Profile tab. */
+    const val HrPairing = "hr_pairing"
+
     private const val RideSummaryBase = "ride_summary"
     const val RideIdArg = "rideId"
     const val RideSummary = "$RideSummaryBase/{$RideIdArg}"
