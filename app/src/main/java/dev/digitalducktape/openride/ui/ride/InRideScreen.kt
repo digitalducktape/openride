@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.digitalducktape.openride.core.ride.RideGoal
+import dev.digitalducktape.openride.core.route.RoutePosition
 import dev.digitalducktape.openride.ui.common.TimeFormat
 import dev.digitalducktape.openride.ui.theme.MetricTextStyles
 import dev.digitalducktape.openride.ui.theme.OpenRideColors
@@ -105,6 +106,16 @@ fun InRideScreen(
                         avgValue = uiState.currentZone?.label ?: (if (uiState.ftp == null) "No FTP set" else "--"),
                         maxValue = null,
                         modifier = Modifier.weight(1f),
+                    )
+                }
+
+                uiState.routePosition?.let { position ->
+                    RouteProgressRow(
+                        routeName = uiState.route?.name,
+                        position = position,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 20.dp),
                     )
                 }
 
@@ -240,6 +251,47 @@ private fun AutoPausedBanner(modifier: Modifier = Modifier) {
         )
     }
 }
+
+/**
+ * Progress along the loaded GPX route (PRD #21/T21) — grade, percent complete and distance
+ * remaining, advancing purely with accumulated ride distance. Display-only: Gen 2 has no
+ * auto-resistance, so nothing here drives the bike.
+ */
+@Composable
+private fun RouteProgressRow(
+    routeName: String?,
+    position: RoutePosition,
+    modifier: Modifier = Modifier,
+) {
+    val remainingMiles = position.remainingMeters / METERS_PER_MILE
+    Column(modifier = modifier) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = routeName ?: "Route",
+                style = MetricTextStyles.TileLabel,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = "%+.1f%% grade  •  %.2f mi to go".format(position.gradePercent, remainingMiles),
+                style = MetricTextStyles.TileLabel,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        LinearProgressIndicator(
+            progress = { position.progressFraction.toFloat() },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 6.dp),
+            color = MaterialTheme.colorScheme.tertiary,
+        )
+    }
+}
+
+/** Miles are the app's display unit; routes are measured in metres. */
+private const val METERS_PER_MILE = 1609.344
 
 /** Live progress toward the rider's pre-ride goal (PRD P1-3). */
 @Composable

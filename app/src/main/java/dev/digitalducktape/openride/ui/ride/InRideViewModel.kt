@@ -10,6 +10,9 @@ import dev.digitalducktape.openride.core.ride.PowerZone
 import dev.digitalducktape.openride.core.ride.RideGoal
 import dev.digitalducktape.openride.core.ride.RideSessionManager
 import dev.digitalducktape.openride.core.ride.RideSessionState
+import dev.digitalducktape.openride.core.route.Route
+import dev.digitalducktape.openride.core.route.RouteHolder
+import dev.digitalducktape.openride.core.route.RoutePosition
 import dev.digitalducktape.openride.core.sensor.BikeDataSource
 import dev.digitalducktape.openride.core.sensor.BikeMetrics
 import dev.digitalducktape.openride.core.sensor.ConnectionState
@@ -50,6 +53,8 @@ data class InRideUiState(
     val heartRatePaired: Boolean = false,
     val heartRateConnectionState: ConnectionState = ConnectionState.Unavailable,
     val autoPaused: Boolean = false,
+    val route: Route? = null,
+    val routePosition: RoutePosition? = null,
 ) {
     val sensorsAvailable: Boolean get() = connectionState == ConnectionState.Connected
     val isPaused: Boolean get() = sessionState == RideSessionState.Paused
@@ -98,6 +103,7 @@ class InRideViewModel(
     profileRepository: ProfileRepository,
     activeProfileHolder: ActiveProfileHolder,
     private val heartRateManager: HeartRateManager? = null,
+    routeHolder: RouteHolder? = null,
 ) : ViewModel() {
     // profileRepository.observeProfiles() is backed by a Room @Query Flow, which (unlike the
     // rest of this view model's plain in-memory StateFlows) doesn't necessarily emit its first
@@ -135,13 +141,24 @@ class InRideViewModel(
             }
         }
 
+    private val routeFlow: Flow<Route?> = routeHolder?.activeRoute ?: flowOf(null)
+
+    // Heart rate + auto-pause + active route folded into one flow so the outer combine stays
+    // within combine()'s 5-arg typed limit.
+    private val secondaryFlow: Flow<SecondaryFlow> = combine(
+        heartRateFlow,
+        rideSessionManager.autoPaused,
+        routeFlow,
+    ) { hr, autoPaused, route ->
+        SecondaryFlow(hr, autoPaused, route)
+    }
+
     val uiState: Flow<InRideUiState> = combine(
         coreFlow,
         rideSessionManager.goal,
         ftpFlow,
-        heartRateFlow,
-        rideSessionManager.autoPaused,
-    ) { core, goal, ftp, hr, autoPaused ->
+        secondaryFlow,
+    ) { core, goal, ftp, secondary ->
         InRideUiState(
             elapsedSec = core.elapsedSec,
             sessionState = core.sessionState,
@@ -150,10 +167,11 @@ class InRideViewModel(
             connectionState = core.connectionState,
             goal = goal,
             ftp = ftp,
-            heartRateBpm = hr.bpm,
-            heartRatePaired = hr.paired,
-            heartRateConnectionState = hr.state,
-            autoPaused = autoPaused,
+            heartRateBpm = secondary.hr.bpm,
+            heartRatePaired = secondary.hr.paired,
+            heartRateConnectionState = secondary.hr.state,
+            autoPaused = secondary.autoPaused,
+            route = secondary.route,
         )
     }.scan(InRideUiState()) { previous, next ->
         // Distance has no dedicated field on BikeMetrics/RideSample (PRD only requires
@@ -167,7 +185,10 @@ class InRideViewModel(
         } else {
             0.0
         }
-        next.copy(distanceMiles = previous.distanceMiles + addedMiles)
+        val distanceMiles = previous.distanceMiles + addedMiles
+        // Map accumulated distance onto the active route for the grade/progress overlay (T21).
+        val routePosition = next.route?.positionAt(distanceMiles * METERS_PER_MILE)
+        next.copy(distanceMiles = distanceMiles, routePosition = routePosition)
     }
 
     fun pause() = rideSessionManager.pause()
@@ -195,4 +216,15 @@ class InRideViewModel(
         val paired: Boolean,
         val state: ConnectionState,
     )
+
+    private data class SecondaryFlow(
+        val hr: HeartRateSnapshot,
+        val autoPaused: Boolean,
+        val route: Route?,
+    )
+
+    private companion object {
+        /** Exact international-mile conversion, for mapping display miles onto route metres. */
+        const val METERS_PER_MILE = 1609.344
+    }
 }
