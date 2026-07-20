@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adaptive icons need a foreground layer; the artwork itself is edge-to-edge, so it lives
+     entirely in the background layer (see mipmap-anydpi-v26/ic_launcher.xml) and this stays
+     transparent. -->
+<color xmlns:android="http://schemas.android.com/apk/res/android" android:color="@android:color/transparent" />

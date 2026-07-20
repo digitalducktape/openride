@@ -98,6 +98,7 @@ fun MainScaffold(
                             appContainer.contentRepository,
                             appContainer.rideSessionManager,
                             appContainer.activeProfileHolder,
+                            appContainer.rideRepository,
                         )
                     },
                 )

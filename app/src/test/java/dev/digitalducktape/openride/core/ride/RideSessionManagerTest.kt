@@ -216,6 +216,33 @@ class RideSessionManagerTest {
     }
 
     @Test
+    fun `stop records the class video id when the ride was started with one`() = runTest {
+        val manager = RideSessionManager(fakeBikeDataSource, rideRepository, backgroundScope) { 0L }
+        manager.start(profileId, videoId = "dQw4w9WgXcQ")
+        advanceTimeBy(2_000)
+        runCurrent()
+
+        val ride = manager.stop()
+
+        requireNotNull(ride)
+        assertEquals("dQw4w9WgXcQ", ride.videoId)
+        assertEquals("dQw4w9WgXcQ", rideRepository.getRide(ride.id)?.videoId)
+    }
+
+    @Test
+    fun `a quick start ride persists no video id`() = runTest {
+        val manager = RideSessionManager(fakeBikeDataSource, rideRepository, backgroundScope) { 0L }
+        manager.start(profileId)
+        advanceTimeBy(2_000)
+        runCurrent()
+
+        val ride = manager.stop()
+
+        requireNotNull(ride)
+        assertNull(ride.videoId)
+    }
+
+    @Test
     fun `stop computes outputKj and calories from summed power`() = runTest {
         val manager = RideSessionManager(fakeBikeDataSource, rideRepository, backgroundScope) { 0L }
         manager.start(profileId)

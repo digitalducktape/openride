@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -14,8 +15,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -36,6 +41,7 @@ import dev.digitalducktape.openride.core.content.ChannelSection
 import dev.digitalducktape.openride.core.content.Video
 import dev.digitalducktape.openride.ui.common.TimeFormat
 import dev.digitalducktape.openride.ui.theme.MetricTextStyles
+import dev.digitalducktape.openride.ui.theme.OpenRideColors
 import kotlinx.coroutines.launch
 
 private val CardWidth = 280.dp
@@ -55,6 +61,7 @@ fun ClassesScreen(
     modifier: Modifier = Modifier,
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val takenVideos by viewModel.takenVideos.collectAsState(initial = emptyMap())
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) { viewModel.refresh() }
@@ -64,8 +71,9 @@ fun ClassesScreen(
             is ClassesUiState.Loading -> LoadingContent()
             is ClassesUiState.Loaded -> LoadedContent(
                 state = state,
+                takenVideos = takenVideos,
                 onVideoSelected = { video ->
-                    if (viewModel.startRideForVideo()) onStartVideoRide(video.id)
+                    if (viewModel.startRideForVideo(video.id)) onStartVideoRide(video.id)
                 },
                 onRetry = { scope.launch { viewModel.refresh() } },
             )
@@ -83,6 +91,7 @@ private fun LoadingContent(modifier: Modifier = Modifier) {
 @Composable
 private fun LoadedContent(
     state: ClassesUiState.Loaded,
+    takenVideos: Map<String, Long>,
     onVideoSelected: (Video) -> Unit,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
@@ -125,7 +134,11 @@ private fun LoadedContent(
                 contentPadding = PaddingValues(bottom = 24.dp),
             ) {
                 items(nonEmptySections, key = { it.channelId }) { section ->
-                    ChannelRow(section = section, onVideoSelected = onVideoSelected)
+                    ChannelRow(
+                        section = section,
+                        takenVideos = takenVideos,
+                        onVideoSelected = onVideoSelected,
+                    )
                 }
             }
         }
@@ -151,6 +164,7 @@ private fun RefreshFailedBanner(modifier: Modifier = Modifier) {
 @Composable
 private fun ChannelRow(
     section: ChannelSection,
+    takenVideos: Map<String, Long>,
     onVideoSelected: (Video) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -167,14 +181,23 @@ private fun ChannelRow(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             items(section.videos, key = { it.id }) { video ->
-                VideoCard(video = video, onClick = { onVideoSelected(video) })
+                VideoCard(
+                    video = video,
+                    takenEpochMs = takenVideos[video.id],
+                    onClick = { onVideoSelected(video) },
+                )
             }
         }
     }
 }
 
 @Composable
-private fun VideoCard(video: Video, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun VideoCard(
+    video: Video,
+    takenEpochMs: Long?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Column(
         modifier = modifier
             .width(CardWidth)
@@ -191,6 +214,16 @@ private fun VideoCard(video: Video, onClick: () -> Unit, modifier: Modifier = Mo
                     .clip(RoundedCornerShape(12.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant),
             )
+            // "Already ridden" badge (v2): when this class was last taken by the active
+            // rider — the reminder that keeps someone from unknowingly repeating a class.
+            takenEpochMs?.let { epochMs ->
+                TakenBadge(
+                    epochMs = epochMs,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(6.dp),
+                )
+            }
             // Duration is only shown when known — the RSS feed never includes it and
             // oEmbed doesn't reliably either (see YouTubeContentRepository), so most
             // videos simply won't have a badge here rather than showing a fake "0:00".
@@ -211,6 +244,33 @@ private fun VideoCard(video: Video, onClick: () -> Unit, modifier: Modifier = Mo
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 8.dp),
+        )
+    }
+}
+
+/** Check + "TAKEN JUL 19" pill over the thumbnail of an already-ridden class. */
+@Composable
+private fun TakenBadge(epochMs: Long, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .background(
+                color = MaterialTheme.colorScheme.background.copy(alpha = 0.85f),
+                shape = RoundedCornerShape(6.dp),
+            )
+            .padding(horizontal = 6.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Check,
+            contentDescription = null,
+            tint = OpenRideColors.Success,
+            modifier = Modifier.size(12.dp),
+        )
+        Text(
+            text = TakenLabel.format(epochMs),
+            style = MetricTextStyles.UnitLabel,
+            color = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier.padding(start = 4.dp),
         )
     }
 }

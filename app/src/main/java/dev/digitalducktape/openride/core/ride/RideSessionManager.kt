@@ -91,6 +91,7 @@ class RideSessionManager(
     val autoPaused: StateFlow<Boolean> = _autoPaused.asStateFlow()
 
     private var profileId: Long = 0
+    private var videoId: String? = null
     private var rideStartEpochMs: Long = 0
     private var tickerJob: Job? = null
     private var resumeWatcherJob: Job? = null
@@ -105,11 +106,16 @@ class RideSessionManager(
     private var maxCadenceSeen: Int = 0
     private var maxPowerSeen: Int = 0
 
-    /** Starts a new ride for [profileId]. No-op if not currently [RideSessionState.Idle]. */
-    fun start(profileId: Long) {
+    /**
+     * Starts a new ride for [profileId]. No-op if not currently [RideSessionState.Idle].
+     * [videoId] is the class the ride plays in the in-app player (v2), recorded on the
+     * persisted ride for the Classes tab's "taken" badges; `null` for a Quick Start.
+     */
+    fun start(profileId: Long, videoId: String? = null) {
         if (_state.value != RideSessionState.Idle) return
 
         this.profileId = profileId
+        this.videoId = videoId
         rideStartEpochMs = epochMillisProvider()
         sampleBuffer.clear()
         sumCadence = 0
@@ -210,6 +216,7 @@ class RideSessionManager(
             avgResistance = aggregates.avgResistance,
             outputKj = outputKj,
             calories = calories,
+            videoId = videoId,
         )
 
         val rideId = rideRepository.saveRide(ride, sampleBuffer.toList())

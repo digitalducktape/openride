@@ -12,6 +12,7 @@ import dev.digitalducktape.openride.core.content.FeedFetcher
 import dev.digitalducktape.openride.core.content.YouTubeContentRepository
 import dev.digitalducktape.openride.core.data.OpenRideDatabase
 import dev.digitalducktape.openride.core.data.Profile
+import dev.digitalducktape.openride.core.data.Ride
 import dev.digitalducktape.openride.core.data.ProfileRepository
 import dev.digitalducktape.openride.core.data.RideRepository
 import dev.digitalducktape.openride.core.profile.ActiveProfileHolder
@@ -21,6 +22,7 @@ import dev.digitalducktape.openride.core.ride.RideSessionState
 import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -76,7 +78,7 @@ class ClassesViewModelTest {
         fetcher: FeedFetcher = FeedFetcher { fixtureXml() },
     ): Pair<ClassesViewModel, RideSessionManager> {
         val manager = RideSessionManager(FakeBikeDataSource(), rideRepository, scope)
-        val viewModel = ClassesViewModel(repository(fetcher), manager, activeProfileHolder)
+        val viewModel = ClassesViewModel(repository(fetcher), manager, activeProfileHolder, rideRepository)
         return viewModel to manager
     }
 
@@ -123,6 +125,7 @@ class ClassesViewModelTest {
             ),
             manager,
             activeProfileHolder,
+            rideRepository,
         )
 
         viewModel.refresh()
@@ -135,7 +138,7 @@ class ClassesViewModelTest {
     fun `startRideForVideo returns false and starts nothing when no profile is active`() = runTest {
         val (viewModel, manager) = viewModel(backgroundScope)
 
-        val started = viewModel.startRideForVideo()
+        val started = viewModel.startRideForVideo("videoAbc123")
 
         assertFalse(started)
         assertEquals(RideSessionState.Idle, manager.state.value)
@@ -149,9 +152,53 @@ class ClassesViewModelTest {
         activeProfileHolder.setActiveProfile(profileId)
         val (viewModel, manager) = viewModel(backgroundScope)
 
-        val started = viewModel.startRideForVideo()
+        val started = viewModel.startRideForVideo("videoAbc123")
 
         assertTrue(started)
         assertEquals(RideSessionState.Active, manager.state.value)
+    }
+
+    @Test
+    fun `takenVideos maps each ridden class to its most recent take`() = runTest {
+        val profileId = profileRepository.createProfile(
+            Profile(name = "Ed", avatarEmoji = "🚴", avatarColor = 0xFF00AAFF.toInt(), weightKg = null, ftp = null),
+        )
+        activeProfileHolder.setActiveProfile(profileId)
+        val (viewModel, _) = viewModel(backgroundScope)
+
+        suspend fun save(videoId: String?, startEpochMs: Long) {
+            rideRepository.saveRide(
+                Ride(
+                    profileId = profileId,
+                    startEpochMs = startEpochMs,
+                    durationSec = 60,
+                    avgCadence = 70,
+                    maxCadence = 80,
+                    avgPower = 100,
+                    maxPower = 120,
+                    avgResistance = 30,
+                    outputKj = 6.0,
+                    calories = 6,
+                    videoId = videoId,
+                ),
+                emptyList(),
+            )
+        }
+        save(videoId = "classA", startEpochMs = 1_000L)
+        save(videoId = "classA", startEpochMs = 2_000L)
+        save(videoId = "classB", startEpochMs = 3_000L)
+        save(videoId = null, startEpochMs = 4_000L) // quick start, never badged
+
+        assertEquals(
+            mapOf("classA" to 2_000L, "classB" to 3_000L),
+            viewModel.takenVideos.first(),
+        )
+    }
+
+    @Test
+    fun `takenVideos is empty when no profile is active`() = runTest {
+        val (viewModel, _) = viewModel(backgroundScope)
+
+        assertEquals(emptyMap<String, Long>(), viewModel.takenVideos.first())
     }
 }
