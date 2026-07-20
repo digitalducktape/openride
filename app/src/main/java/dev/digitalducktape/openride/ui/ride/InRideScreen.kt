@@ -2,11 +2,14 @@ package dev.digitalducktape.openride.ui.ride
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.LinearProgressIndicator
@@ -25,17 +28,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import dev.digitalducktape.openride.core.ride.RideGoal
 import dev.digitalducktape.openride.core.route.RoutePosition
 import dev.digitalducktape.openride.ui.common.TimeFormat
 import dev.digitalducktape.openride.ui.theme.MetricTextStyles
 import dev.digitalducktape.openride.ui.theme.OpenRideColors
+import dev.digitalducktape.openride.ui.theme.zoneColor
 import kotlinx.coroutines.launch
 
 /**
- * The core screen (PRD P0-7/P0-9/P0-10): big elapsed timer, cadence/resistance/output tiles
- * with current+avg+max, a distance/speed/live-output secondary row, and pause/end controls.
+ * The core screen (PRD P0-7/P0-9/P0-10, v2 redesign spec): bike-app arrangement — elapsed
+ * timer top-center with goal progress beneath it, the huge zone-colored current-output
+ * numeral in the middle, and the shared [RideMetricsBar] pinned along the bottom edge.
  * Keep-screen-on is driven from [dev.digitalducktape.openride.MainActivity] observing
  * [dev.digitalducktape.openride.core.ride.RideSessionManager.isRideActive] directly, not
  * from this screen, so the flag can't be left dangling across navigation/recomposition.
@@ -59,135 +65,61 @@ fun InRideScreen(
                 AutoPausedBanner()
             }
 
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 40.dp, vertical = 24.dp),
-            ) {
-                Text(
-                    text = TimeFormat.elapsed(uiState.elapsedSec),
-                    style = MetricTextStyles.TimerDisplay,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                )
-
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(20.dp),
+            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 24.dp),
+                        .align(Alignment.TopCenter)
+                        .padding(top = 20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    val dash = "--"
-                    MetricTile(
-                        label = "CADENCE (rpm)",
-                        currentValue = if (uiState.sensorsAvailable) "${uiState.metrics.cadenceRpm}" else dash,
-                        avgValue = "${uiState.aggregates.avgCadence}",
-                        maxValue = "${uiState.aggregates.maxCadence}",
-                        modifier = Modifier.weight(1f),
+                    Text(
+                        text = TimeFormat.elapsed(uiState.elapsedSec),
+                        style = MetricTextStyles.TimerDisplay,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        textAlign = TextAlign.Center,
                     )
-                    MetricTile(
-                        label = "RESISTANCE (%)",
-                        currentValue = if (uiState.sensorsAvailable) "${uiState.metrics.resistancePercent}" else dash,
-                        avgValue = "${uiState.aggregates.avgResistance}",
-                        maxValue = null,
-                        modifier = Modifier.weight(1f),
-                    )
-                    MetricTile(
-                        label = "OUTPUT (W)",
-                        currentValue = if (uiState.sensorsAvailable) "${uiState.metrics.powerWatts}" else dash,
-                        avgValue = "${uiState.aggregates.avgPower}",
-                        maxValue = "${uiState.aggregates.maxPower}",
-                        modifier = Modifier.weight(1f),
-                    )
-                    MetricTile(
-                        label = "ZONE",
-                        currentValue = uiState.currentZone?.let { "Z${it.number}" } ?: dash,
-                        avgValue = uiState.currentZone?.label ?: (if (uiState.ftp == null) "No FTP set" else "--"),
-                        maxValue = null,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-
-                uiState.routePosition?.let { position ->
-                    RouteProgressRow(
-                        routeName = uiState.route?.name,
-                        position = position,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 20.dp),
-                    )
-                }
-
-                if (uiState.goal != RideGoal.None) {
-                    GoalProgressRow(
-                        goal = uiState.goal,
-                        progress = uiState.goalProgress ?: 0.0,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 20.dp),
-                    )
-                }
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 24.dp),
-                    horizontalArrangement = Arrangement.spacedBy(32.dp),
-                ) {
-                    SecondaryStat(
-                        label = "Distance",
-                        value = if (uiState.sensorsAvailable) {
-                            "%.2f mi".format(uiState.distanceMiles)
-                        } else {
-                            "--"
-                        },
-                    )
-                    SecondaryStat(
-                        label = "Speed",
-                        value = if (uiState.sensorsAvailable) {
-                            "%.1f mph".format(uiState.metrics.speedMph)
-                        } else {
-                            "--"
-                        },
-                    )
-                    SecondaryStat(
-                        label = "Output",
-                        value = "%.1f kJ".format(uiState.liveOutputKj),
-                    )
-                    // Heart rate (PRD P1-4, T17) — only once a strap is paired for this rider.
-                    // Shows "--" while paired-but-not-yet-connected, the live bpm once connected.
-                    if (uiState.heartRateTileVisible) {
-                        SecondaryStat(
-                            label = "Heart Rate",
-                            value = uiState.heartRateBpm
-                                ?.takeIf { uiState.heartRateConnected }
-                                ?.let { "$it bpm" }
-                                ?: "--",
+                    if (uiState.goal != RideGoal.None) {
+                        GoalProgressRow(
+                            goal = uiState.goal,
+                            progress = uiState.goalProgress ?: 0.0,
+                            modifier = Modifier.width(360.dp).padding(top = 8.dp),
                         )
                     }
                 }
 
                 Row(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 32.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        .align(Alignment.TopEnd)
+                        .padding(top = 24.dp, end = 32.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     OutlinedButton(
                         onClick = { if (uiState.isPaused) viewModel.resume() else viewModel.pause() },
-                        modifier = Modifier.weight(1f),
                     ) {
                         Text(if (uiState.isPaused) "Resume" else "Pause")
                     }
-                    Button(
-                        onClick = { showEndConfirmation = true },
-                        modifier = Modifier.weight(1f),
-                    ) {
+                    Button(onClick = { showEndConfirmation = true }) {
                         Text("End Ride")
                     }
                 }
+
+                OutputHero(
+                    uiState = uiState,
+                    modifier = Modifier.align(Alignment.Center),
+                )
+
+                uiState.routePosition?.let { position ->
+                    RouteProgressRow(
+                        routeName = uiState.route?.name,
+                        position = position,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(horizontal = 40.dp, vertical = 12.dp),
+                    )
+                }
             }
+
+            RideMetricsBar(uiState = uiState, translucent = false)
         }
     }
 
@@ -213,6 +145,46 @@ fun InRideScreen(
                 }
             },
         )
+    }
+}
+
+/**
+ * The screen's centerpiece: current output in watts, zone-colored once the rider has an
+ * FTP set, with a zone chip beneath. "--" (never a fake zero, P0-9) while sensors are down.
+ */
+@Composable
+private fun OutputHero(uiState: InRideUiState, modifier: Modifier = Modifier) {
+    val zone = uiState.currentZone
+    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = "OUTPUT (W)",
+            style = MetricTextStyles.TileLabel,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = if (uiState.sensorsAvailable) "${uiState.metrics.powerWatts}" else "--",
+            style = MetricTextStyles.OutputHero,
+            color = if (zone != null) zoneColor(zone) else MaterialTheme.colorScheme.onBackground,
+        )
+        if (zone != null) {
+            Box(
+                modifier = Modifier
+                    .background(color = zoneColor(zone).copy(alpha = 0.18f), shape = RoundedCornerShape(16.dp))
+                    .padding(horizontal = 14.dp, vertical = 4.dp),
+            ) {
+                Text(
+                    text = "ZONE ${zone.number} · ${zone.label.uppercase()}",
+                    style = MetricTextStyles.TileLabel,
+                    color = zoneColor(zone),
+                )
+            }
+        } else if (uiState.ftp == null) {
+            Text(
+                text = "Set an FTP in your profile to see power zones",
+                style = MetricTextStyles.TileValueSecondary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 
@@ -323,22 +295,6 @@ private fun GoalProgressRow(goal: RideGoal, progress: Double, modifier: Modifier
                 .fillMaxWidth()
                 .padding(top = 6.dp),
             color = MaterialTheme.colorScheme.primary,
-        )
-    }
-}
-
-@Composable
-private fun SecondaryStat(label: String, value: String, modifier: Modifier = Modifier) {
-    Column(modifier = modifier, horizontalAlignment = Alignment.Start) {
-        Text(
-            text = label,
-            style = MetricTextStyles.TileLabel,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-            text = value,
-            style = MetricTextStyles.TileValueSecondary,
-            color = MaterialTheme.colorScheme.onBackground,
         )
     }
 }

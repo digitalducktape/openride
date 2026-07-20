@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
@@ -29,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.digitalducktape.openride.core.ride.RideGoal
+import dev.digitalducktape.openride.ui.theme.MetricTextStyles
 
 /**
  * Home tab (PRD P0-7): greeting with the active rider and a prominent Quick Start button.
@@ -46,11 +48,27 @@ fun HomeScreen(
     var showGoalDialog by remember { mutableStateOf(false) }
 
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Column(modifier = Modifier.fillMaxSize().padding(48.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(modifier = Modifier.fillMaxSize().padding(horizontal = 48.dp, vertical = 36.dp)) {
+            // Bike-app-style header: greeting on the left, the rider's avatar chip on the
+            // right (v2 redesign spec).
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "WELCOME BACK",
+                        style = MetricTextStyles.SectionEyebrow,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = activeProfile?.name ?: "Rider",
+                        style = MaterialTheme.typography.headlineLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
                 Box(
                     modifier = Modifier
-                        .size(64.dp)
+                        .size(56.dp)
                         .background(
                             color = activeProfile?.let { Color(it.avatarColor) }
                                 ?: MaterialTheme.colorScheme.surfaceVariant,
@@ -58,46 +76,66 @@ fun HomeScreen(
                         ),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(text = activeProfile?.avatarEmoji ?: "👤", fontSize = 28.sp)
+                    Text(text = activeProfile?.avatarEmoji ?: "👤", fontSize = 26.sp)
                 }
+            }
+
+            // Hero card: the one big action on this screen.
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 32.dp)
+                    .background(
+                        color = MaterialTheme.colorScheme.surface,
+                        shape = RoundedCornerShape(20.dp),
+                    )
+                    .padding(28.dp),
+            ) {
                 Text(
-                    text = "Hi, ${activeProfile?.name ?: "rider"}",
+                    text = "JUST RIDE",
+                    style = MetricTextStyles.SectionEyebrow,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    text = "Quick Start",
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground,
-                    modifier = Modifier.padding(start = 16.dp),
+                    modifier = Modifier.padding(top = 6.dp),
                 )
-            }
-
-            Button(
-                onClick = { if (viewModel.startQuickRide()) onQuickStart() },
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 40.dp)
-                    .height(88.dp),
-            ) {
                 Text(
-                    text = "Quick Start",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 20.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = goalSummaryLabel(goal),
+                    text = "Free ride with live cadence, resistance, and output",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.padding(top = 4.dp),
                 )
-                OutlinedButton(onClick = { showGoalDialog = true }) {
-                    Text(if (goal == RideGoal.None) "Set Goal" else "Change Goal")
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 24.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Button(
+                        onClick = { if (viewModel.startQuickRide()) onQuickStart() },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                        modifier = Modifier.height(56.dp),
+                    ) {
+                        Text(
+                            text = "Start ride",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 24.dp),
+                        )
+                    }
+                    Text(
+                        text = goalSummaryLabel(goal),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f).padding(start = 24.dp),
+                    )
+                    OutlinedButton(onClick = { showGoalDialog = true }) {
+                        Text(if (goal == RideGoal.None) "Set goal" else "Change goal")
+                    }
                 }
             }
         }

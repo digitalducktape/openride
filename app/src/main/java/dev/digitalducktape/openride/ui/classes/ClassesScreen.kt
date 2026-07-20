@@ -35,10 +35,11 @@ import coil.compose.AsyncImage
 import dev.digitalducktape.openride.core.content.ChannelSection
 import dev.digitalducktape.openride.core.content.Video
 import dev.digitalducktape.openride.ui.common.TimeFormat
+import dev.digitalducktape.openride.ui.theme.MetricTextStyles
 import kotlinx.coroutines.launch
 
-private val CardWidth = 220.dp
-private val CardThumbnailHeight = 124.dp
+private val CardWidth = 280.dp
+private val CardThumbnailHeight = 158.dp
 
 /**
  * Classes tab (PRD P0-6, T10/v2): one horizontal row per configured YouTube channel, each
@@ -153,12 +154,13 @@ private fun ChannelRow(
     onVideoSelected: (Video) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier = modifier.padding(top = 24.dp)) {
+    Column(modifier = modifier.padding(top = 28.dp)) {
+        // Tracked-caps shelf eyebrow (v2 redesign spec) — the bike app labels its content
+        // shelves this way rather than with title-case headings.
         Text(
-            text = section.channelName,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground,
+            text = section.channelName.uppercase(),
+            style = MetricTextStyles.SectionEyebrow,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         LazyRow(
             modifier = Modifier.padding(top = 12.dp),
