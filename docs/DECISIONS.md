@@ -71,10 +71,13 @@ the added complexity.
 
 ## Classes catalog: page scraping alongside RSS
 
-The Classes catalog fetches each source's public YouTube page in addition to its RSS feed.
-The feed carries neither video duration nor any visibility flag and stops at 15 videos, so
-"no classes under 10 minutes" and "no members-only classes" are both impossible from it. The
-page's embedded `ytInitialData` has durations, is public-only, and covers ~30 videos.
+**Decision (2026-07-20):** the Classes catalog fetches each source's public YouTube page in
+addition to its RSS feed.
+
+**Why:** the feed carries neither video duration nor any visibility flag and stops at 15
+videos, so "no classes under 10 minutes" and "no members-only classes" are both impossible
+from it. The page's embedded `ytInitialData` has durations, is public-only, and covers ~30
+videos.
 
 The alternative was the YouTube Data API, which would mean an API key and a quota — this app
 is deliberately key-free. The cost of scraping is fragility: YouTube can change the page
@@ -87,9 +90,11 @@ return 404/500 for valid URLs — observed alternating between 200 and 404 secon
 
 ## The Classes catalog lives in the database
 
-`ChannelConfig` is now only a seed list. The live catalog is the `content_sources` table so
-riders can add their own channels and playlists and hide built-ins they don't ride. Built-ins
-are hideable but not deletable, so the original catalog is always recoverable.
+**Decision (2026-07-20):** `ChannelConfig` is now only a seed list — the live catalog is the
+`content_sources` table.
+
+**Why:** it lets riders add their own channels and playlists and hide built-ins they don't
+ride. Built-ins are hideable but not deletable, so the original catalog is always recoverable.
 
 ## Automatic local backup lives in shared Downloads, not app storage
 

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -97,6 +98,9 @@ fun ContentSourcesScreen(
                 Button(
                     onClick = { scope.launch { viewModel.resolve(input) } },
                     enabled = input.isNotBlank() && addState !is AddSourceState.Resolving,
+                    // Material3's default Button height (40dp) falls short of the 48dp this
+                    // bike's touchscreen needs; IconButton/Switch already meet it.
+                    modifier = Modifier.heightIn(min = 48.dp),
                 ) {
                     Text("Look up")
                 }
@@ -116,6 +120,12 @@ fun ContentSourcesScreen(
                 )
 
                 is AddSourceState.Resolved -> Column(modifier = Modifier.padding(top = 16.dp)) {
+                    // Local to this resolution: disables the row the instant a category is
+                    // tapped so a double-tap can't fire confirmAdd twice while the first save
+                    // is still in flight (the DB's unique index blocks the duplicate row, but
+                    // which category wins would be nondeterministic and no error surfaces).
+                    // Discarded and reset whenever a new Resolved state mounts.
+                    var isSaving by remember { mutableStateOf(false) }
                     Text(
                         text = "Add \"${state.source.displayName}\" as:",
                         style = MaterialTheme.typography.titleMedium,
@@ -125,19 +135,33 @@ fun ContentSourcesScreen(
                         modifier = Modifier.padding(top = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        Button(onClick = {
-                            scope.launch {
-                                viewModel.confirmAdd(ContentCategory.Workout)
-                                input = ""
-                            }
-                        }) { Text("Workout") }
-                        Button(onClick = {
-                            scope.launch {
-                                viewModel.confirmAdd(ContentCategory.Scenic)
-                                input = ""
-                            }
-                        }) { Text("Scenic") }
-                        OutlinedButton(onClick = viewModel::cancelAdd) { Text("Cancel") }
+                        Button(
+                            onClick = {
+                                isSaving = true
+                                scope.launch {
+                                    viewModel.confirmAdd(ContentCategory.Workout)
+                                    input = ""
+                                }
+                            },
+                            enabled = !isSaving,
+                            modifier = Modifier.heightIn(min = 48.dp),
+                        ) { Text("Workout") }
+                        Button(
+                            onClick = {
+                                isSaving = true
+                                scope.launch {
+                                    viewModel.confirmAdd(ContentCategory.Scenic)
+                                    input = ""
+                                }
+                            },
+                            enabled = !isSaving,
+                            modifier = Modifier.heightIn(min = 48.dp),
+                        ) { Text("Scenic") }
+                        OutlinedButton(
+                            onClick = viewModel::cancelAdd,
+                            enabled = !isSaving,
+                            modifier = Modifier.heightIn(min = 48.dp),
+                        ) { Text("Cancel") }
                     }
                 }
 
