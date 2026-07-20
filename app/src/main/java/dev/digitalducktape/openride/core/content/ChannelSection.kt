@@ -1,9 +1,13 @@
 package dev.digitalducktape.openride.core.content
 
-/** Which curated grouping a [ChannelConfig.Channel] belongs to (PRD P0-6's two content groups). */
+/**
+ * Which curated grouping a source belongs to. These are the two browsable class categories
+ * on the Classes tab — "Just Ride" is the Home tab's quick start and "Random" is a button,
+ * so neither is a category here.
+ */
 enum class ContentCategory {
     Scenic,
-    Rides,
+    Workout,
 }
 
 /**
