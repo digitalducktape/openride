@@ -1,5 +1,8 @@
+@file:OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+
 package dev.digitalducktape.openride.ui.classes
 
+import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.digitalducktape.openride.core.content.ChannelConfig
@@ -7,11 +10,23 @@ import dev.digitalducktape.openride.core.content.ContentCache
 import dev.digitalducktape.openride.core.content.ContentCategory
 import dev.digitalducktape.openride.core.content.FeedFetcher
 import dev.digitalducktape.openride.core.content.YouTubeContentRepository
+import dev.digitalducktape.openride.core.data.OpenRideDatabase
+import dev.digitalducktape.openride.core.data.Profile
+import dev.digitalducktape.openride.core.data.ProfileRepository
+import dev.digitalducktape.openride.core.data.RideRepository
+import dev.digitalducktape.openride.core.profile.ActiveProfileHolder
+import dev.digitalducktape.openride.core.ride.FakeBikeDataSource
+import dev.digitalducktape.openride.core.ride.RideSessionManager
+import dev.digitalducktape.openride.core.ride.RideSessionState
 import java.io.IOException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -20,6 +35,11 @@ class ClassesViewModelTest {
 
     private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
 
+    private lateinit var db: OpenRideDatabase
+    private lateinit var profileRepository: ProfileRepository
+    private lateinit var rideRepository: RideRepository
+    private lateinit var activeProfileHolder: ActiveProfileHolder
+
     private val testChannel = ChannelConfig.Channel(
         id = "UCTestChannel00000000",
         displayName = "Test Cycling Channel",
@@ -27,31 +47,49 @@ class ClassesViewModelTest {
         category = ContentCategory.Scenic,
     )
 
+    @Before
+    fun setUp() {
+        db = Room.inMemoryDatabaseBuilder(context, OpenRideDatabase::class.java).build()
+        profileRepository = ProfileRepository(db.profileDao())
+        rideRepository = RideRepository(db, db.rideDao())
+        activeProfileHolder = ActiveProfileHolder(context)
+    }
+
+    @After
+    fun tearDown() {
+        db.close()
+    }
+
     private fun fixtureXml() =
         requireNotNull(javaClass.classLoader?.getResourceAsStream("fixtures/sample_atom_feed.xml"))
 
-    @Test
-    fun `starts in Loading state before refresh is called`() {
-        val repository = YouTubeContentRepository(
+    private fun repository(fetcher: FeedFetcher = FeedFetcher { fixtureXml() }) =
+        YouTubeContentRepository(
             context = context,
             channels = listOf(testChannel),
-            fetcher = FeedFetcher { fixtureXml() },
+            fetcher = fetcher,
             cache = ContentCache(context),
         )
-        val viewModel = ClassesViewModel(repository)
+
+    private fun viewModel(
+        scope: CoroutineScope,
+        fetcher: FeedFetcher = FeedFetcher { fixtureXml() },
+    ): Pair<ClassesViewModel, RideSessionManager> {
+        val manager = RideSessionManager(FakeBikeDataSource(), rideRepository, scope)
+        val viewModel = ClassesViewModel(repository(fetcher), manager, activeProfileHolder)
+        return viewModel to manager
+    }
+
+    @Test
+    fun `starts in Loading state before refresh is called`() = runTest {
+        val (viewModel, _) = viewModel(backgroundScope)
 
         assertTrue(viewModel.uiState.value is ClassesUiState.Loading)
     }
 
     @Test
     fun `refresh loads channel sections successfully`() = runTest {
-        val repository = YouTubeContentRepository(
-            context = context,
-            channels = listOf(testChannel),
-            fetcher = FeedFetcher { fixtureXml() },
-            cache = ContentCache(context),
-        )
-        val viewModel = ClassesViewModel(repository)
+        val (viewModel, _) = viewModel(backgroundScope)
 
         viewModel.refresh()
 
@@ -63,13 +101,7 @@ class ClassesViewModelTest {
 
     @Test
     fun `anyRefreshFailed is true when a channel's fetch fails`() = runTest {
-        val repository = YouTubeContentRepository(
-            context = context,
-            channels = listOf(testChannel),
-            fetcher = FeedFetcher { throw IOException("down") },
-            cache = ContentCache(context),
-        )
-        val viewModel = ClassesViewModel(repository)
+        val (viewModel, _) = viewModel(backgroundScope, FeedFetcher { throw IOException("down") })
 
         viewModel.refresh()
 
@@ -81,20 +113,45 @@ class ClassesViewModelTest {
     @Test
     fun `refresh can be called again to reload`() = runTest {
         var callCount = 0
-        val repository = YouTubeContentRepository(
-            context = context,
-            channels = listOf(testChannel),
-            fetcher = FeedFetcher {
-                callCount++
-                fixtureXml()
-            },
-            cache = ContentCache(context),
+        val manager = RideSessionManager(FakeBikeDataSource(), rideRepository, backgroundScope)
+        val viewModel = ClassesViewModel(
+            repository(
+                FeedFetcher {
+                    callCount++
+                    fixtureXml()
+                },
+            ),
+            manager,
+            activeProfileHolder,
         )
-        val viewModel = ClassesViewModel(repository)
 
         viewModel.refresh()
         viewModel.refresh()
 
         assertEquals(2, callCount)
+    }
+
+    @Test
+    fun `startRideForVideo returns false and starts nothing when no profile is active`() = runTest {
+        val (viewModel, manager) = viewModel(backgroundScope)
+
+        val started = viewModel.startRideForVideo()
+
+        assertFalse(started)
+        assertEquals(RideSessionState.Idle, manager.state.value)
+    }
+
+    @Test
+    fun `startRideForVideo starts the session for the active profile`() = runTest {
+        val profileId = profileRepository.createProfile(
+            Profile(name = "Ed", avatarEmoji = "🚴", avatarColor = 0xFF00AAFF.toInt(), weightKg = null, ftp = null),
+        )
+        activeProfileHolder.setActiveProfile(profileId)
+        val (viewModel, manager) = viewModel(backgroundScope)
+
+        val started = viewModel.startRideForVideo()
+
+        assertTrue(started)
+        assertEquals(RideSessionState.Active, manager.state.value)
     }
 }

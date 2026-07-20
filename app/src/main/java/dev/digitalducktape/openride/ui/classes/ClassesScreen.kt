@@ -28,7 +28,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -42,18 +41,19 @@ private val CardWidth = 220.dp
 private val CardThumbnailHeight = 124.dp
 
 /**
- * Classes tab (PRD P0-6, T10): one horizontal row per configured YouTube channel, each video
- * a card with thumbnail/title/duration-when-known. Tapping a card hands off to the YouTube
- * app/browser (see [launchVideo]) rather than an in-app player — see `docs/DECISIONS.md` for
- * why.
+ * Classes tab (PRD P0-6, T10/v2): one horizontal row per configured YouTube channel, each
+ * video a card with thumbnail/title/duration-when-known. Tapping a card starts a ride for
+ * the active profile and opens the in-app player with metrics overlaid
+ * ([dev.digitalducktape.openride.ui.ride.VideoRideScreen]) — superseding v1's handoff to
+ * the YouTube app, see `docs/DECISIONS.md`.
  */
 @Composable
 fun ClassesScreen(
     viewModel: ClassesViewModel,
+    onStartVideoRide: (videoId: String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) { viewModel.refresh() }
@@ -63,7 +63,9 @@ fun ClassesScreen(
             is ClassesUiState.Loading -> LoadingContent()
             is ClassesUiState.Loaded -> LoadedContent(
                 state = state,
-                onVideoSelected = { video -> launchVideo(context, video.id) },
+                onVideoSelected = { video ->
+                    if (viewModel.startRideForVideo()) onStartVideoRide(video.id)
+                },
                 onRetry = { scope.launch { viewModel.refresh() } },
             )
         }

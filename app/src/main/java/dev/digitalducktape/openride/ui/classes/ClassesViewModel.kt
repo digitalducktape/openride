@@ -2,6 +2,8 @@ package dev.digitalducktape.openride.ui.classes
 
 import androidx.lifecycle.ViewModel
 import dev.digitalducktape.openride.core.content.YouTubeContentRepository
+import dev.digitalducktape.openride.core.profile.ActiveProfileHolder
+import dev.digitalducktape.openride.core.ride.RideSessionManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -17,7 +19,11 @@ import kotlinx.coroutines.flow.asStateFlow
  * can be driven directly from `runTest` in tests without depending on `viewModelScope`'s
  * Main-dispatcher wiring.
  */
-class ClassesViewModel(private val contentRepository: YouTubeContentRepository) : ViewModel() {
+class ClassesViewModel(
+    private val contentRepository: YouTubeContentRepository,
+    private val rideSessionManager: RideSessionManager,
+    private val activeProfileHolder: ActiveProfileHolder,
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow<ClassesUiState>(ClassesUiState.Loading)
     val uiState: StateFlow<ClassesUiState> = _uiState.asStateFlow()
@@ -30,5 +36,18 @@ class ClassesViewModel(private val contentRepository: YouTubeContentRepository) 
             sections = sections,
             anyRefreshFailed = sections.any { it.refreshFailed },
         )
+    }
+
+    /**
+     * Starts a ride session for the active profile ahead of navigating to the in-app video
+     * player (v2 spec) — same semantics as
+     * [dev.digitalducktape.openride.ui.home.HomeViewModel.startQuickRide]: returns `false`
+     * (and starts nothing) when no profile is active, and the caller treats that as
+     * "not navigable."
+     */
+    fun startRideForVideo(): Boolean {
+        val profileId = activeProfileHolder.activeProfileId.value ?: return false
+        rideSessionManager.start(profileId)
+        return true
     }
 }

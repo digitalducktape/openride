@@ -24,6 +24,14 @@ object Destinations {
     const val RideSummary = "$RideSummaryBase/{$RideIdArg}"
 
     fun rideSummary(rideId: Long) = "$RideSummaryBase/$rideId"
+
+    /** In-app class playback with metrics overlaid (v2 spec) — the video-backed
+     *  counterpart to [InRide], entered from the Classes tab. */
+    private const val VideoRideBase = "video_ride"
+    const val VideoIdArg = "videoId"
+    const val VideoRide = "$VideoRideBase/{$VideoIdArg}"
+
+    fun videoRide(videoId: String) = "$VideoRideBase/$videoId"
 }
 
 /** Nested-tab routes inside [Destinations.Main]'s inner `NavHost`. */

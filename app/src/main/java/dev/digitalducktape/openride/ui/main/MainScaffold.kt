@@ -103,10 +103,19 @@ fun MainScaffold(
             composable(MainTabs.Classes) {
                 val viewModel: ClassesViewModel = viewModel(
                     factory = viewModelFactory {
-                        ClassesViewModel(appContainer.contentRepository)
+                        ClassesViewModel(
+                            appContainer.contentRepository,
+                            appContainer.rideSessionManager,
+                            appContainer.activeProfileHolder,
+                        )
                     },
                 )
-                ClassesScreen(viewModel = viewModel)
+                ClassesScreen(
+                    viewModel = viewModel,
+                    onStartVideoRide = { videoId ->
+                        outerNavController.navigate(Destinations.videoRide(videoId))
+                    },
+                )
             }
             composable(MainTabs.History) {
                 val viewModel: HistoryViewModel = viewModel(
