@@ -16,6 +16,7 @@ import dev.digitalducktape.openride.core.heartrate.BleScanner
 import dev.digitalducktape.openride.core.heartrate.HeartRateManager
 import dev.digitalducktape.openride.core.profile.ActiveProfileHolder
 import dev.digitalducktape.openride.core.ride.RideSessionManager
+import dev.digitalducktape.openride.core.route.RouteHolder
 import dev.digitalducktape.openride.core.sensor.BikeDataSource
 import dev.digitalducktape.openride.core.sensor.MockBikeDataSource
 import dev.digitalducktape.openride.core.sensor.PelotonBikeDataSource
@@ -104,6 +105,11 @@ class AppContainer(private val applicationContext: Context) {
     /** Curated YouTube-channel content for the Classes browser (PRD P0-6, T9/T10). */
     val contentRepository: YouTubeContentRepository by lazy {
         YouTubeContentRepository(applicationContext)
+    }
+
+    /** The currently-loaded GPX route overlay for the ride screen (PRD #21/T21), if any. */
+    val routeHolder: RouteHolder by lazy {
+        RouteHolder()
     }
 }
 

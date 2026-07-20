@@ -32,6 +32,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.digitalducktape.openride.core.route.RouteHolder
 import dev.digitalducktape.openride.ui.common.ExportShare
 import kotlinx.coroutines.launch
 
@@ -48,15 +49,29 @@ fun ProfileTabScreen(
     onSwitchRider: () -> Unit,
     onRestoreComplete: () -> Unit,
     onManageHeartRateStrap: () -> Unit,
+    routeHolder: RouteHolder,
     modifier: Modifier = Modifier,
 ) {
     val activeProfile by viewModel.activeProfile.collectAsState(initial = null)
+    val activeRoute by routeHolder.activeRoute.collectAsState()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
     var pendingRestoreContent by remember { mutableStateOf<String?>(null) }
     var restoreError by remember { mutableStateOf<String?>(null) }
     var showSwitchConfirmation by remember { mutableStateOf(false) }
+
+    var routeError by remember { mutableStateOf<String?>(null) }
+
+    // GPX route import (PRD #21/T21). GetContent rather than a typed picker because GPX has no
+    // reliably-registered MIME type across file providers — "*/*" keeps every provider listing it.
+    val pickRouteFile = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val loaded = runCatching {
+            context.contentResolver.openInputStream(uri)?.use { routeHolder.load(it) }
+        }.getOrNull()
+        routeError = if (loaded == null) "Couldn't read that file as a GPX route" else null
+    }
 
     val pickBackupFile = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -123,6 +138,48 @@ fun ProfileTabScreen(
                         "Pair heart-rate strap"
                     },
                 )
+            }
+
+            Text(
+                text = "Route (GPX)",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 32.dp),
+            )
+            activeRoute?.let { route ->
+                Text(
+                    text = "%s  •  %.2f mi".format(
+                        route.name ?: "Loaded route",
+                        route.totalDistanceMeters / 1609.344,
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+            routeError?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.padding(top = 8.dp),
+            ) {
+                OutlinedButton(onClick = { pickRouteFile.launch("*/*") }) {
+                    Text(if (activeRoute == null) "Load Route" else "Change Route")
+                }
+                if (activeRoute != null) {
+                    OutlinedButton(onClick = {
+                        routeHolder.clear()
+                        routeError = null
+                    }) {
+                        Text("Clear Route")
+                    }
+                }
             }
 
             Text(
