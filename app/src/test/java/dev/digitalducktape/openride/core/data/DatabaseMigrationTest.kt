@@ -196,4 +196,28 @@ class DatabaseMigrationTest {
             assertEquals(142, it.getInt(it.getColumnIndexOrThrow("heartRateBpm")))
         }
     }
+
+    @Test
+    fun `migration 4 to 5 creates an empty content_sources table`() {
+        val db = openV1Database()
+        MIGRATION_1_2.migrate(db)
+        MIGRATION_2_3.migrate(db)
+        MIGRATION_3_4.migrate(db)
+
+        MIGRATION_4_5.migrate(db)
+
+        db.query("SELECT COUNT(*) FROM content_sources").use { cursor ->
+            cursor.moveToFirst()
+            assertEquals(0, cursor.getInt(0))
+        }
+        db.query("PRAGMA table_info(content_sources)").use { cursor ->
+            val columns = buildList {
+                while (cursor.moveToNext()) add(cursor.getString(cursor.getColumnIndexOrThrow("name")))
+            }
+            assertEquals(
+                listOf("id", "sourceType", "youtubeId", "displayName", "category", "builtIn", "hidden", "position"),
+                columns,
+            )
+        }
+    }
 }
