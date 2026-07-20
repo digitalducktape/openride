@@ -26,8 +26,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -177,19 +181,54 @@ private fun TopScrimRow(
     onEndRide: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        // Goal progress runs across the very top edge, the way the class player runs the
+        // class timeline there.
+        uiState.goalProgress?.let { progress ->
+            LinearProgressIndicator(
+                progress = { progress.toFloat() },
+                modifier = Modifier.fillMaxWidth().height(3.dp),
+                color = OpenRideColors.Accent,
+                trackColor = OpenRideColors.Divider,
+            )
+        }
+        TopStripContent(
+            uiState = uiState,
+            onPauseResume = onPauseResume,
+            onEndRide = onEndRide,
+        )
+    }
+}
+
+@Composable
+private fun TopStripContent(
+    uiState: InRideUiState,
+    onPauseResume: () -> Unit,
+    onEndRide: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .background(OpenRideColors.ScrimOverlay)
-            .padding(horizontal = 24.dp, vertical = 10.dp),
+            .background(
+                Brush.verticalGradient(listOf(Color(0xCC000000), Color.Transparent)),
+            )
+            .padding(horizontal = 24.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text(
-            text = TimeFormat.elapsed(uiState.elapsedSec),
-            style = MetricTextStyles.BarValue,
-            color = OpenRideColors.OnBackground,
-        )
+        Column {
+            Text(
+                text = TimeFormat.elapsed(uiState.elapsedSec),
+                style = MetricTextStyles.BarValue,
+                color = OpenRideColors.OnBackground,
+            )
+            Text(
+                text = "ELAPSED",
+                style = MetricTextStyles.UnitLabel,
+                color = OpenRideColors.OnSurfaceVariant,
+            )
+        }
 
         val statusText = when {
             !uiState.sensorsAvailable -> "Sensors not detected"
