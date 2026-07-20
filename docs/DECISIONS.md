@@ -69,6 +69,28 @@ PRD's Future Considerations). At that point, an embedded WebView IFrame player w
 riders inside OpenRide's own chrome — worth prototyping once there's real usage to justify
 the added complexity.
 
+## Classes catalog: page scraping alongside RSS
+
+The Classes catalog fetches each source's public YouTube page in addition to its RSS feed.
+The feed carries neither video duration nor any visibility flag and stops at 15 videos, so
+"no classes under 10 minutes" and "no members-only classes" are both impossible from it. The
+page's embedded `ytInitialData` has durations, is public-only, and covers ~30 videos.
+
+The alternative was the YouTube Data API, which would mean an API key and a quota — this app
+is deliberately key-free. The cost of scraping is fragility: YouTube can change the page
+shape whenever it likes. That's contained by treating a parse failure exactly like a network
+failure, so the catalog falls back to RSS (working, but unfiltered by length) and then to the
+on-disk cache, and by keeping the parser's expected structure pinned in fixtures.
+
+Every content fetch also retries once: YouTube's feed and page endpoints intermittently
+return 404/500 for valid URLs — observed alternating between 200 and 404 seconds apart.
+
+## The Classes catalog lives in the database
+
+`ChannelConfig` is now only a seed list. The live catalog is the `content_sources` table so
+riders can add their own channels and playlists and hide built-ins they don't ride. Built-ins
+are hideable but not deletable, so the original catalog is always recoverable.
+
 ## Automatic local backup lives in shared Downloads, not app storage
 
 **Decision (2026-07-20):** alongside the manual Back Up button (P1-8), `AutoBackupManager`

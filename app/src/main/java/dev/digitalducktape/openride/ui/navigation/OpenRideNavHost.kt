@@ -12,6 +12,8 @@ import dev.digitalducktape.openride.BuildConfig
 import dev.digitalducktape.openride.viewModelFactory
 import dev.digitalducktape.openride.ui.creator.CreatorScreen
 import dev.digitalducktape.openride.ui.creator.CreatorViewModel
+import dev.digitalducktape.openride.ui.sources.ContentSourcesScreen
+import dev.digitalducktape.openride.ui.sources.ContentSourcesViewModel
 import dev.digitalducktape.openride.ui.update.UpdateScreen
 import dev.digitalducktape.openride.ui.update.UpdateViewModel
 import dev.digitalducktape.openride.ui.main.MainScaffold
@@ -127,6 +129,21 @@ fun OpenRideNavHost(appContainer: AppContainer) {
             UpdateScreen(
                 viewModel = viewModel,
                 onDone = { navController.popBackStack() },
+            )
+        }
+
+        composable(Destinations.ContentSources) {
+            val viewModel: ContentSourcesViewModel = viewModel(
+                factory = viewModelFactory {
+                    ContentSourcesViewModel(
+                        appContainer.contentSourceRepository,
+                        appContainer.channelHandleResolver,
+                    )
+                },
+            )
+            ContentSourcesScreen(
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() },
             )
         }
 
