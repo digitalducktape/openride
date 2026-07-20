@@ -11,6 +11,12 @@ import kotlinx.serialization.Serializable
  * backup file's shape decoupled from Room's own annotations, so a future schema change on one
  * side (e.g. a Room migration) doesn't silently change the other.
  */
+/**
+ * @param avatarPhotoBase64 the rider's avatar photo bytes, base64-encoded — the photo itself
+ *   rather than [Profile.avatarPhotoPath] (an install-specific path that would dangle on any
+ *   other device/install). [BackupRepository] attaches it on export and re-materializes a
+ *   photo file on restore.
+ */
 @Serializable
 data class ProfileBackup(
     val id: Long,
@@ -20,6 +26,7 @@ data class ProfileBackup(
     val weightKg: Double?,
     val ftp: Int?,
     val pairedHrDeviceAddress: String? = null,
+    val avatarPhotoBase64: String? = null,
 )
 
 @Serializable
@@ -35,6 +42,7 @@ data class RideBackup(
     val avgResistance: Int,
     val outputKj: Double,
     val calories: Int?,
+    val videoId: String? = null,
 )
 
 @Serializable
@@ -47,14 +55,17 @@ data class RideSampleBackup(
     val heartRateBpm: Int? = null,
 )
 
+// avatarPhotoPath deliberately doesn't round-trip here: the path is install-specific, so
+// BackupRepository swaps it for the photo *bytes* (avatarPhotoBase64) on export and writes a
+// fresh file (new path) on restore.
 fun Profile.toBackup() = ProfileBackup(id, name, avatarEmoji, avatarColor, weightKg, ftp, pairedHrDeviceAddress)
 fun ProfileBackup.toEntity() = Profile(id, name, avatarEmoji, avatarColor, weightKg, ftp, pairedHrDeviceAddress)
 
 fun Ride.toBackup() = RideBackup(
-    id, profileId, startEpochMs, durationSec, avgCadence, maxCadence, avgPower, maxPower, avgResistance, outputKj, calories,
+    id, profileId, startEpochMs, durationSec, avgCadence, maxCadence, avgPower, maxPower, avgResistance, outputKj, calories, videoId,
 )
 fun RideBackup.toEntity() = Ride(
-    id, profileId, startEpochMs, durationSec, avgCadence, maxCadence, avgPower, maxPower, avgResistance, outputKj, calories,
+    id, profileId, startEpochMs, durationSec, avgCadence, maxCadence, avgPower, maxPower, avgResistance, outputKj, calories, videoId,
 )
 
 fun RideSample.toBackup() = RideSampleBackup(rideId, tSec, cadence, resistance, power, heartRateBpm)

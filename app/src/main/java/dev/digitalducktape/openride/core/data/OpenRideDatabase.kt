@@ -6,7 +6,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [Profile::class, Ride::class, RideSample::class],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class OpenRideDatabase : RoomDatabase() {
@@ -41,5 +41,16 @@ val MIGRATION_1_2 = object : androidx.room.migration.Migration(1, 2) {
 val MIGRATION_2_3 = object : androidx.room.migration.Migration(2, 3) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("ALTER TABLE rides ADD COLUMN videoId TEXT")
+    }
+}
+
+/**
+ * Adds camera profile photos ([Profile.avatarPhotoPath]): the absolute path of the rider's
+ * cropped avatar photo on disk. Nullable with no backfill — every existing profile reads back
+ * `null`, i.e. "still using the emoji avatar".
+ */
+val MIGRATION_3_4 = object : androidx.room.migration.Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE profiles ADD COLUMN avatarPhotoPath TEXT")
     }
 }

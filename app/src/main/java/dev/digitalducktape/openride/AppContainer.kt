@@ -4,10 +4,13 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.room.Room
+import dev.digitalducktape.openride.core.backup.AutoBackupManager
 import dev.digitalducktape.openride.core.backup.BackupRepository
+import dev.digitalducktape.openride.core.backup.MediaStoreAutoBackupStore
 import dev.digitalducktape.openride.core.content.YouTubeContentRepository
 import dev.digitalducktape.openride.core.data.MIGRATION_1_2
 import dev.digitalducktape.openride.core.data.MIGRATION_2_3
+import dev.digitalducktape.openride.core.data.MIGRATION_3_4
 import dev.digitalducktape.openride.core.data.OpenRideDatabase
 import dev.digitalducktape.openride.core.data.ProfileRepository
 import dev.digitalducktape.openride.core.data.RideRepository
@@ -16,6 +19,7 @@ import dev.digitalducktape.openride.core.heartrate.BleHeartRateDataSource
 import dev.digitalducktape.openride.core.heartrate.BleScanner
 import dev.digitalducktape.openride.core.heartrate.HeartRateManager
 import dev.digitalducktape.openride.core.profile.ActiveProfileHolder
+import dev.digitalducktape.openride.core.profile.AvatarPhotoStore
 import dev.digitalducktape.openride.core.ride.RideSessionManager
 import dev.digitalducktape.openride.core.route.RouteHolder
 import dev.digitalducktape.openride.core.update.UpdateRepository
@@ -23,8 +27,10 @@ import dev.digitalducktape.openride.core.update.UpdateSettings
 import dev.digitalducktape.openride.core.sensor.BikeDataSource
 import dev.digitalducktape.openride.core.sensor.MockBikeDataSource
 import dev.digitalducktape.openride.core.sensor.PelotonBikeDataSource
+import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.combine
 
 /**
  * Simple hand-rolled dependency container (no Hilt/DI framework per project scope), so
@@ -46,7 +52,12 @@ class AppContainer(private val applicationContext: Context) {
             applicationContext,
             OpenRideDatabase::class.java,
             OpenRideDatabase.DATABASE_NAME,
-        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
+        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build()
+    }
+
+    /** Rider avatar photos on disk (camera capture feature); paths live on [dev.digitalducktape.openride.core.data.Profile.avatarPhotoPath]. */
+    val avatarPhotoStore: AvatarPhotoStore by lazy {
+        AvatarPhotoStore(File(applicationContext.filesDir, "avatars"))
     }
 
     val profileRepository: ProfileRepository by lazy {
@@ -59,7 +70,27 @@ class AppContainer(private val applicationContext: Context) {
 
     /** Whole-database backup/restore to one shareable file (PRD P1-8, T15). */
     val backupRepository: BackupRepository by lazy {
-        BackupRepository(database, database.profileDao(), database.rideDao())
+        BackupRepository(database, database.profileDao(), database.rideDao(), avatarPhotoStore)
+    }
+
+    /**
+     * Rolling automatic backup to shared Downloads storage plus silent restore on an empty
+     * database, so an app update/reinstall doesn't lose ride data. Started once from
+     * [MainActivity.onCreate].
+     */
+    val autoBackupManager: AutoBackupManager by lazy {
+        AutoBackupManager(
+            backupRepository = backupRepository,
+            store = MediaStoreAutoBackupStore(applicationContext),
+            scope = containerScope,
+            dataChanges = combine(
+                database.profileDao().observeAll(),
+                database.rideDao().observeRideCount(),
+            ) { profiles, rideCount -> profiles to rideCount },
+            isDatabaseEmpty = {
+                database.profileDao().getAllOnce().isEmpty() && database.rideDao().getAllRidesOnce().isEmpty()
+            },
+        )
     }
 
     val bikeDataSource: BikeDataSource by lazy {

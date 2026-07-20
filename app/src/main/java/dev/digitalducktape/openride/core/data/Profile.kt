@@ -13,6 +13,10 @@ import androidx.room.PrimaryKey
  *   strap (PRD P1-4, T17) — "remember strap per profile" so each household member doesn't
  *   have to re-pair every ride. Added in schema version 2
  *   ([dev.digitalducktape.openride.core.data.MIGRATION_1_2]); `null` until a strap is paired.
+ * @param avatarPhotoPath optional absolute path of a camera photo (already center-cropped,
+ *   see [dev.digitalducktape.openride.core.profile.AvatarPhotoStore]) shown in place of the
+ *   emoji/color avatar wherever the rider's circle appears. Added in schema version 4
+ *   ([dev.digitalducktape.openride.core.data.MIGRATION_3_4]); `null` means emoji avatar.
  */
 @Entity(tableName = "profiles")
 data class Profile(
@@ -23,4 +27,5 @@ data class Profile(
     val weightKg: Double?,
     val ftp: Int?,
     val pairedHrDeviceAddress: String? = null,
+    val avatarPhotoPath: String? = null,
 )

@@ -15,10 +15,27 @@ because the context-switch to the YouTube app was the roughest seam in v1.
 
 **ToS stance (PRD Non-Goal #5, unchanged):** the embed is YouTube's official player on the
 privacy-enhanced domain; nothing is downloaded, cached, or rehosted; YouTube's native player
-controls stay enabled (`controls=1`) and the metrics overlay is dismissible (tap the video)
-so the player UI is never permanently obscured; no ad-stripping or background-playback
-tricks. Ride pause and video pause are deliberately independent in v2 — syncing them needs
-a JS bridge to the IFrame Player API and is recorded in the v2 spec as a follow-up.
+controls stay enabled (`"controls": 1`) and the metrics overlay is dismissible (tap the
+video) so the player UI is never permanently obscured; no ad-stripping or background-playback
+tricks.
+
+## Classes playback v2.1: ride state and video playback are synced
+
+**Decision (2026-07-20):** the follow-up the entry above reserved is now done — `YouTubeEmbed`
+builds its page on YouTube's official **IFrame Player API** rather than a bare `<iframe>`, and
+`VideoRideScreen` drives it both ways:
+
+- Ride paused (Pause button *or* freewheel auto-pause) → `openridePause()` via
+  `evaluateJavascript`; resuming plays again. Pausing the pedals now pauses the class, which
+  is what riders expect and what the previous "deliberately independent" behavior got wrong.
+- Video reaches `ENDED` → the page calls back through an injected `@JavascriptInterface`
+  (`OpenRideBridge.onVideoEnded()`) and the ride ends and saves automatically, landing on the
+  normal summary instead of running on after the class is over.
+
+Playback control goes exclusively through the official player API, so the ToS stance above is
+unchanged: no direct media manipulation, no chrome stripping. The page keeps a `wantPaused`
+flag because the ride can pause before the player finishes bootstrapping, and the JS-interface
+callback hops to the UI thread (`View.post`) since it arrives on a WebView-internal thread.
 
 ## Classes playback: YouTube app intent vs. in-app WebView IFrame player (T10 — superseded)
 
@@ -51,6 +68,38 @@ depending on what OpenPelo's setup leaves in place) becomes part of the experien
 PRD's Future Considerations). At that point, an embedded WebView IFrame player would keep
 riders inside OpenRide's own chrome — worth prototyping once there's real usage to justify
 the added complexity.
+
+## Automatic local backup lives in shared Downloads, not app storage
+
+**Decision (2026-07-20):** alongside the manual Back Up button (P1-8), `AutoBackupManager`
+keeps a rolling backup written to `Download/OpenRide/openride-autobackup.json` via
+`MediaStore.Downloads`, and silently restores it at launch when the database is empty.
+
+**Why there:** the whole point is surviving an app update or reinstall, and everything under
+the app's own `filesDir`/`cacheDir` is deleted on uninstall — a backup that dies with the app
+isn't a backup. Shared Downloads survives, and MediaStore is the scoped-storage-sanctioned
+way to write it on the tablet's Android 11 without a storage permission. Two recovery paths
+follow from that: an in-place update or cleared app data restores silently through MediaStore,
+while a full uninstall/reinstall severs MediaStore ownership of the row — but the file is
+still sitting in Downloads for the existing "Restore from file" (SAF) picker to open.
+
+**One file per package** (`openride-autobackup-<applicationId>.json`), because MediaStore
+scopes Downloads queries to the owning app. Verified on the bike: with a single shared name,
+the `.real` sensor build wrote the file first, and the mock build could neither see nor
+overwrite it — it silently got `openride-autobackup (1).json`, leaving two same-looking
+backups whose contents belong to different installs. Namespacing keeps each build's history
+its own while staying stable across that package's own reinstalls.
+
+**The one safety rule:** an empty database never overwrites the stored backup. The dangerous
+launch is one where local data is missing *and* the restore didn't take (unreadable file,
+storage hiccup); writing then would replace the last good backup with nothing. This rule
+replaced an earlier "skip the flow's first emission" approach, which had the same intent but
+raced — a conflating source folds changes that arrive before collection starts into that
+first emission, so dropping it dropped real data.
+
+**Avatar photos travel as bytes:** `ProfileBackup.avatarPhotoBase64` carries the photo itself
+rather than `Profile.avatarPhotoPath`, which is an install-specific path that would dangle
+anywhere else; restore writes a fresh file and stores its new path.
 
 ## Bike Gen 2 sensor access: primary mechanism assumption (T3, #3)
 

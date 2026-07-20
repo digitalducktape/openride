@@ -13,8 +13,8 @@ import dev.digitalducktape.openride.viewModelFactory
 import dev.digitalducktape.openride.ui.update.UpdateScreen
 import dev.digitalducktape.openride.ui.update.UpdateViewModel
 import dev.digitalducktape.openride.ui.main.MainScaffold
-import dev.digitalducktape.openride.ui.profile.ProfileCreateScreen
-import dev.digitalducktape.openride.ui.profile.ProfileCreateViewModel
+import dev.digitalducktape.openride.ui.profile.ProfileEditorScreen
+import dev.digitalducktape.openride.ui.profile.ProfileEditorViewModel
 import dev.digitalducktape.openride.ui.profile.ProfileSelectScreen
 import dev.digitalducktape.openride.ui.profile.ProfileSelectViewModel
 import dev.digitalducktape.openride.ui.profile.HrPairingScreen
@@ -54,18 +54,39 @@ fun OpenRideNavHost(appContainer: AppContainer) {
         }
 
         composable(Destinations.ProfileCreate) {
-            val viewModel: ProfileCreateViewModel = viewModel(
+            val viewModel: ProfileEditorViewModel = viewModel(
                 factory = viewModelFactory {
-                    ProfileCreateViewModel(appContainer.profileRepository, appContainer.activeProfileHolder)
+                    ProfileEditorViewModel(appContainer.profileRepository, appContainer.activeProfileHolder)
                 },
             )
-            ProfileCreateScreen(
+            ProfileEditorScreen(
                 viewModel = viewModel,
+                avatarPhotoStore = appContainer.avatarPhotoStore,
+                title = "Add rider",
                 onSaved = {
                     navController.navigate(Destinations.Main) {
                         popUpTo(Destinations.ProfileSelect) { inclusive = true }
                     }
                 },
+                onCancel = { navController.popBackStack() },
+            )
+        }
+
+        composable(Destinations.ProfileEdit) {
+            val viewModel: ProfileEditorViewModel = viewModel(
+                factory = viewModelFactory {
+                    ProfileEditorViewModel(
+                        appContainer.profileRepository,
+                        appContainer.activeProfileHolder,
+                        editActiveProfile = true,
+                    )
+                },
+            )
+            ProfileEditorScreen(
+                viewModel = viewModel,
+                avatarPhotoStore = appContainer.avatarPhotoStore,
+                title = "Edit profile",
+                onSaved = { navController.popBackStack() },
                 onCancel = { navController.popBackStack() },
             )
         }

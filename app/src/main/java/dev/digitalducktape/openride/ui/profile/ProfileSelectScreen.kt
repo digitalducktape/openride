@@ -27,6 +27,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.digitalducktape.openride.core.data.Profile
+import dev.digitalducktape.openride.ui.common.ProfileAvatar
 import dev.digitalducktape.openride.ui.theme.OpenRideColors
 
 /**
@@ -99,14 +100,7 @@ private fun RiderAvatar(profile: Profile, onClick: () -> Unit) {
             .clickable(onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Box(
-            modifier = Modifier
-                .size(180.dp)
-                .background(color = Color(profile.avatarColor), shape = CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(text = profile.avatarEmoji, fontSize = 72.sp)
-        }
+        ProfileAvatar(profile = profile, size = 180.dp, emojiSize = 72.sp)
         Text(
             text = profile.name,
             style = MaterialTheme.typography.titleLarge,

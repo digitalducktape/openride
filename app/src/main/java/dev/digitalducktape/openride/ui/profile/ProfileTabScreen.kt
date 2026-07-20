@@ -2,16 +2,14 @@ package dev.digitalducktape.openride.ui.profile
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -27,13 +25,15 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.digitalducktape.openride.core.backup.MediaStoreAutoBackupStore
+import dev.digitalducktape.openride.core.profile.WeightUnits
 import dev.digitalducktape.openride.core.route.RouteHolder
 import dev.digitalducktape.openride.ui.common.ExportShare
+import dev.digitalducktape.openride.ui.common.ProfileAvatar
 import kotlinx.coroutines.launch
 
 /**
@@ -46,6 +46,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun ProfileTabScreen(
     viewModel: ProfileTabViewModel,
+    onEditProfile: () -> Unit,
     onSwitchRider: () -> Unit,
     onRestoreComplete: () -> Unit,
     onManageHeartRateStrap: () -> Unit,
@@ -82,21 +83,11 @@ fun ProfileTabScreen(
 
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
-            modifier = Modifier.fillMaxSize().padding(48.dp),
+            // Scrollable: with Edit profile added, the stack can exceed the screen.
+            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(48.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Box(
-                modifier = Modifier
-                    .size(96.dp)
-                    .background(
-                        color = activeProfile?.let { Color(it.avatarColor) }
-                            ?: MaterialTheme.colorScheme.surfaceVariant,
-                        shape = CircleShape,
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(text = activeProfile?.avatarEmoji ?: "👤", fontSize = 40.sp)
-            }
+            ProfileAvatar(profile = activeProfile, size = 96.dp, emojiSize = 40.sp)
             Text(
                 text = activeProfile?.name ?: "No rider selected",
                 style = MaterialTheme.typography.headlineSmall,
@@ -106,7 +97,7 @@ fun ProfileTabScreen(
             )
             activeProfile?.let { profile ->
                 val details = buildList {
-                    profile.weightKg?.let { add("${it} kg") }
+                    profile.weightKg?.let { add("${WeightUnits.formatLbs(it)} lb") }
                     profile.ftp?.let { add("FTP ${it}W") }
                 }
                 if (details.isNotEmpty()) {
@@ -120,8 +111,15 @@ fun ProfileTabScreen(
             }
 
             OutlinedButton(
-                onClick = { showSwitchConfirmation = true },
+                onClick = onEditProfile,
                 modifier = Modifier.width(280.dp).padding(top = 32.dp),
+            ) {
+                Text("Edit profile")
+            }
+
+            OutlinedButton(
+                onClick = { showSwitchConfirmation = true },
+                modifier = Modifier.width(280.dp).padding(top = 16.dp),
             ) {
                 Text("Switch rider")
             }
@@ -195,6 +193,14 @@ fun ProfileTabScreen(
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 32.dp),
+            )
+            Text(
+                text = "Also backed up automatically after every ride to " +
+                    MediaStoreAutoBackupStore.RELATIVE_PATH +
+                    MediaStoreAutoBackupStore.fileNameFor(context.packageName),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp),
             )
             Row(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
