@@ -63,15 +63,28 @@ fun CreatorScreen(
                 CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
             }
 
-            is CreatorUiState.NotFound -> Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center,
+            is CreatorUiState.NotFound -> Column(
+                modifier = Modifier.fillMaxSize().padding(vertical = 32.dp, horizontal = 48.dp),
             ) {
-                Text(
-                    text = "That creator is no longer in your catalog",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                // This screen runs on the bike's own launcher, so a rider stranded here (their
+                // source was deleted while they navigated) still needs a way back.
+                IconButton(onClick = onBack) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back to classes",
+                        tint = MaterialTheme.colorScheme.onBackground,
+                    )
+                }
+                Box(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "That creator is no longer in your catalog",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
 
             is CreatorUiState.Loaded -> LoadedCreator(

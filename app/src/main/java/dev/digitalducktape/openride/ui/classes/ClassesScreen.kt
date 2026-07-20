@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -316,7 +317,11 @@ private fun ChannelRow(
         // Tapping the shelf eyebrow opens the creator's own page — their full recent catalog
         // plus the playlists they've curated, which the single row here can't show.
         Row(
-            modifier = Modifier.clickable(onClick = onOpenCreator),
+            // Sized to a real touch target for a screen operated mid-ride, without growing the
+            // shelf's visual rhythm — the eyebrow text stays centered at its normal size.
+            modifier = Modifier
+                .heightIn(min = 48.dp)
+                .clickable(onClick = onOpenCreator),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(

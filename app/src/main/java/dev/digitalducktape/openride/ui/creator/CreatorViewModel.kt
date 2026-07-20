@@ -71,10 +71,20 @@ class CreatorViewModel(
         updateRow(playlistId) { it.copy(isLoading = true, loadFailed = false) }
         val videos = contentRepository.playlistVideos(playlistId, row.playlist.title)
         updateRow(playlistId) {
+            // An empty list means either the fetch failed or the playlist genuinely has no
+            // rideable classes (e.g. everything in it was under the minimum length). Both are
+            // treated as "couldn't load" on purpose: either way there's nothing to ride, and
+            // the shelf shows the same honest message rather than a misleading "empty" state.
             it.copy(videos = videos, isLoading = false, loadFailed = videos.isEmpty())
         }
     }
 
+    // Safe only because every call lands on Compose's single-threaded Main dispatcher: this
+    // read-modify-write of _uiState.value has no suspension point in between, and loadPlaylist
+    // is only ever driven from a LaunchedEffect, with playlistVideos doing its I/O inside
+    // withContext(Dispatchers.IO) and resuming back on the caller's dispatcher. If these loads
+    // were ever launched on Dispatchers.Default, two shelves finishing at once could race and
+    // one update could clobber the other.
     private fun updateRow(playlistId: String, transform: (PlaylistRow) -> PlaylistRow) {
         val loaded = _uiState.value as? CreatorUiState.Loaded ?: return
         _uiState.value = loaded.copy(
