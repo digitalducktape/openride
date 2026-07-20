@@ -8,7 +8,7 @@ package dev.digitalducktape.openride.core.content
  * `"externalId":"UC..."` value embedded in it (handles themselves aren't usable in the RSS
  * feed URL — only the underlying channel id is: `/feeds/videos.xml?channel_id=<id>`).
  * Verified live against each channel's actual RSS feed at the time this was written
- * (feed `<title>` matched the expected channel name for all four).
+ * (feed `<title>` matched the expected channel name for all twelve).
  */
 object ChannelConfig {
     data class Channel(
@@ -19,34 +19,23 @@ object ChannelConfig {
     )
 
     val SCENIC = listOf(
-        Channel(
-            id = "UCbQiCVLFtWLOjVO0YuUqo7Q",
-            displayName = "Virtual Cycling Workouts",
-            handle = "@VirtualCyclingWorkouts",
-            category = ContentCategory.Scenic,
-        ),
-        Channel(
-            id = "UCVbBtdw-_SCqGDs6-_awaDg",
-            displayName = "Indoor Cycling Videos",
-            handle = "@IndoorCyclingVideos",
-            category = ContentCategory.Scenic,
-        ),
+        Channel("UCbQiCVLFtWLOjVO0YuUqo7Q", "Virtual Cycling Workouts", "@VirtualCyclingWorkouts", ContentCategory.Scenic),
+        Channel("UCVbBtdw-_SCqGDs6-_awaDg", "Indoor Cycling Videos", "@IndoorCyclingVideos", ContentCategory.Scenic),
+        Channel("UCWXNvnztTNz99SYgTnyltwg", "Bike the World", "@biketheworld", ContentCategory.Scenic),
     )
 
-    val RIDES = listOf(
-        Channel(
-            id = "UCbSfwHIgMnaINnkmDaFzqDw",
-            displayName = "Ride With Alina",
-            handle = "@ridewithalina",
-            category = ContentCategory.Rides,
-        ),
-        Channel(
-            id = "UCo0Pbk8bCutBN-Yf_404Kvw",
-            displayName = "Gabriella Lynn",
-            handle = "@GabriellaLynnn",
-            category = ContentCategory.Rides,
-        ),
+    val WORKOUT = listOf(
+        Channel("UCbSfwHIgMnaINnkmDaFzqDw", "Ride With Alina", "@ridewithalina", ContentCategory.Workout),
+        Channel("UCo0Pbk8bCutBN-Yf_404Kvw", "Gabriella Lynn", "@GabriellaLynnn", ContentCategory.Workout),
+        Channel("UChY_9WJx0saa0St48lSdytQ", "Kaleigh Cohen Cycling", "@kaleigh", ContentCategory.Workout),
+        Channel("UCyEw-nPmOgo18LPK7wkkdtQ", "Kirsten Allen", "@KirstenAllen", ContentCategory.Workout),
+        Channel("UCMEiuHFc7nHTDq2_KzLu0bw", "GCN Training", "@GCNTraining", ContentCategory.Workout),
+        Channel("UC0d6o9_OVUZdC4g3ci1_UXA", "The Spin Junkie", "@TheSpinJunkie", ContentCategory.Workout),
+        Channel("UCDomKTwMIX0U_cMQzUweggQ", "Kristina Girod", "@KristinaGirod", ContentCategory.Workout),
+        Channel("UCH9KY-e1kLOMQ2NcDvXMO3w", "Joe Alvarado", "@JoeAlvarado", ContentCategory.Workout),
+        Channel("UCU8VLagwhLbab5RQhjlzY9A", "TaG Cycling", "@TaGCycling1", ContentCategory.Workout),
     )
 
-    val ALL = SCENIC + RIDES
+    /** Seed order for the `content_sources` table: scenic rows first, then workouts. */
+    val ALL = SCENIC + WORKOUT
 }
