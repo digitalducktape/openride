@@ -13,6 +13,9 @@ import kotlinx.coroutines.flow.Flow
  * which this project doesn't otherwise need, so the transaction boundary lives one layer
  * up instead.
  */
+/** One row of [RideDao.observeTakenVideos]: a class and when it was last ridden. */
+data class TakenVideo(val videoId: String, val lastTakenEpochMs: Long)
+
 @Dao
 interface RideDao {
     @Insert
@@ -29,6 +32,13 @@ interface RideDao {
 
     @Query("SELECT * FROM ride_samples WHERE rideId = :rideId ORDER BY tSec ASC")
     suspend fun getSamples(rideId: Long): List<RideSample>
+
+    /** Most recent take of each class this profile has ridden (v2 "taken" badges). */
+    @Query(
+        "SELECT videoId, MAX(startEpochMs) AS lastTakenEpochMs FROM rides " +
+            "WHERE profileId = :profileId AND videoId IS NOT NULL GROUP BY videoId",
+    )
+    fun observeTakenVideos(profileId: Long): Flow<List<TakenVideo>>
 
     // --- Backup & restore (PRD P1-8, T15) ---------------------------------------------------
 

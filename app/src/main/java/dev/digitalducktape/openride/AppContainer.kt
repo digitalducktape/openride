@@ -7,6 +7,7 @@ import androidx.room.Room
 import dev.digitalducktape.openride.core.backup.BackupRepository
 import dev.digitalducktape.openride.core.content.YouTubeContentRepository
 import dev.digitalducktape.openride.core.data.MIGRATION_1_2
+import dev.digitalducktape.openride.core.data.MIGRATION_2_3
 import dev.digitalducktape.openride.core.data.OpenRideDatabase
 import dev.digitalducktape.openride.core.data.ProfileRepository
 import dev.digitalducktape.openride.core.data.RideRepository
@@ -45,7 +46,7 @@ class AppContainer(private val applicationContext: Context) {
             applicationContext,
             OpenRideDatabase::class.java,
             OpenRideDatabase.DATABASE_NAME,
-        ).addMigrations(MIGRATION_1_2).build()
+        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
     }
 
     val profileRepository: ProfileRepository by lazy {

@@ -32,6 +32,10 @@ class RideRepository(
     /** Newest-first ride history, scoped to a single profile. */
     fun observeHistory(profileId: Long): Flow<List<Ride>> = rideDao.observeHistory(profileId)
 
+    /** Most recent take of each class this profile has ridden (v2 "taken" badges). */
+    fun observeTakenVideos(profileId: Long): Flow<List<TakenVideo>> =
+        rideDao.observeTakenVideos(profileId)
+
     suspend fun getRide(rideId: Long): Ride? = rideDao.getById(rideId)
 
     suspend fun getSamples(rideId: Long): List<RideSample> = rideDao.getSamples(rideId)

@@ -6,7 +6,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [Profile::class, Ride::class, RideSample::class],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class OpenRideDatabase : RoomDatabase() {
@@ -29,5 +29,17 @@ val MIGRATION_1_2 = object : androidx.room.migration.Migration(1, 2) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("ALTER TABLE profiles ADD COLUMN pairedHrDeviceAddress TEXT")
         db.execSQL("ALTER TABLE ride_samples ADD COLUMN heartRateBpm INTEGER")
+    }
+}
+
+/**
+ * Records which class a ride played ([Ride.videoId], v2 in-app player) so the Classes tab
+ * can badge already-taken videos. Nullable with no backfill: every pre-existing ride —
+ * including v1 rides that launched the YouTube app, where the app never knew when playback
+ * ended — reads back `null`, i.e. "no class attached".
+ */
+val MIGRATION_2_3 = object : androidx.room.migration.Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE rides ADD COLUMN videoId TEXT")
     }
 }

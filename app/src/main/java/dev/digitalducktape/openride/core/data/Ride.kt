@@ -13,6 +13,9 @@ import androidx.room.PrimaryKey
  *
  * @param outputKj total mechanical output in kilojoules (Σ power over the ride / 1000)
  * @param calories estimated calorie burn; null when it can't be estimated
+ * @param videoId the YouTube video this ride played in the in-app class player (v2), or
+ *   `null` for a plain Quick Start ride. Drives the Classes tab's "taken on …" badges.
+ *   Added in schema version 3 ([MIGRATION_2_3]).
  */
 @Entity(
     tableName = "rides",
@@ -38,4 +41,5 @@ data class Ride(
     val avgResistance: Int,
     val outputKj: Double,
     val calories: Int?,
+    val videoId: String? = null,
 )

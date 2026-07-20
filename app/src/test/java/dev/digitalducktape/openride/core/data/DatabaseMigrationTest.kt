@@ -105,6 +105,39 @@ class DatabaseMigrationTest {
     }
 
     @Test
+    fun `migrate 2 to 3 preserves rides and adds a null videoId`() {
+        val db = openV1Database()
+        MIGRATION_1_2.migrate(db)
+        db.execSQL(
+            "INSERT INTO profiles (id, name, avatarEmoji, avatarColor, weightKg, ftp) " +
+                "VALUES (1, 'Ed', '🚴', -16711936, NULL, NULL)",
+        )
+        db.execSQL(
+            "INSERT INTO rides (id, profileId, startEpochMs, durationSec, avgCadence, maxCadence, " +
+                "avgPower, maxPower, avgResistance, outputKj, calories) " +
+                "VALUES (1, 1, 1700000000000, 1800, 85, 100, 150, 300, 45, 270.0, 260)",
+        )
+
+        MIGRATION_2_3.migrate(db)
+
+        db.query("SELECT outputKj, videoId FROM rides WHERE id = 1").use {
+            assertEquals(true, it.moveToFirst())
+            assertEquals(270.0, it.getDouble(it.getColumnIndexOrThrow("outputKj")), 0.001)
+            assertEquals(true, it.isNull(it.getColumnIndexOrThrow("videoId")))
+        }
+
+        db.execSQL(
+            "INSERT INTO rides (id, profileId, startEpochMs, durationSec, avgCadence, maxCadence, " +
+                "avgPower, maxPower, avgResistance, outputKj, calories, videoId) " +
+                "VALUES (2, 1, 1700000100000, 600, 70, 80, 100, 120, 30, 60.0, 58, 'dQw4w9WgXcQ')",
+        )
+        db.query("SELECT videoId FROM rides WHERE id = 2").use {
+            assertEquals(true, it.moveToFirst())
+            assertEquals("dQw4w9WgXcQ", it.getString(it.getColumnIndexOrThrow("videoId")))
+        }
+    }
+
+    @Test
     fun `migrate 1 to 2 lets new rows populate both new columns`() {
         val db = openV1Database()
 
