@@ -17,6 +17,8 @@ import dev.digitalducktape.openride.core.heartrate.HeartRateManager
 import dev.digitalducktape.openride.core.profile.ActiveProfileHolder
 import dev.digitalducktape.openride.core.ride.RideSessionManager
 import dev.digitalducktape.openride.core.route.RouteHolder
+import dev.digitalducktape.openride.core.update.UpdateRepository
+import dev.digitalducktape.openride.core.update.UpdateSettings
 import dev.digitalducktape.openride.core.sensor.BikeDataSource
 import dev.digitalducktape.openride.core.sensor.MockBikeDataSource
 import dev.digitalducktape.openride.core.sensor.PelotonBikeDataSource
@@ -110,6 +112,16 @@ class AppContainer(private val applicationContext: Context) {
     /** The currently-loaded GPX route overlay for the ride screen (PRD #21/T21), if any. */
     val routeHolder: RouteHolder by lazy {
         RouteHolder()
+    }
+
+    /** User-configured update manifest URL for the opt-in self-updater (PRD #22/T22). */
+    val updateSettings: UpdateSettings by lazy {
+        UpdateSettings(applicationContext)
+    }
+
+    /** Fetch/download side of the opt-in self-updater (PRD #22/T22). */
+    val updateRepository: UpdateRepository by lazy {
+        UpdateRepository(applicationContext)
     }
 }
 

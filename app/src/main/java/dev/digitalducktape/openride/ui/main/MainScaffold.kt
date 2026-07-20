@@ -151,6 +151,7 @@ fun MainScaffold(
                         // "switch rider": pairing is a full-screen flow, not a fifth tab.
                         outerNavController.navigate(Destinations.HrPairing)
                     },
+                    onManageAppUpdates = { outerNavController.navigate(Destinations.AppUpdate) },
                     routeHolder = appContainer.routeHolder,
                 )
             }

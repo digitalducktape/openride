@@ -8,7 +8,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import dev.digitalducktape.openride.AppContainer
+import dev.digitalducktape.openride.BuildConfig
 import dev.digitalducktape.openride.viewModelFactory
+import dev.digitalducktape.openride.ui.update.UpdateScreen
+import dev.digitalducktape.openride.ui.update.UpdateViewModel
 import dev.digitalducktape.openride.ui.main.MainScaffold
 import dev.digitalducktape.openride.ui.profile.ProfileCreateScreen
 import dev.digitalducktape.openride.ui.profile.ProfileCreateViewModel
@@ -81,6 +84,23 @@ fun OpenRideNavHost(appContainer: AppContainer) {
                 },
             )
             HrPairingScreen(
+                viewModel = viewModel,
+                onDone = { navController.popBackStack() },
+            )
+        }
+
+        composable(Destinations.AppUpdate) {
+            val viewModel: UpdateViewModel = viewModel(
+                factory = viewModelFactory {
+                    UpdateViewModel(
+                        appContainer.updateSettings,
+                        appContainer.updateRepository,
+                        currentVersionCode = BuildConfig.VERSION_CODE,
+                        currentVersionName = BuildConfig.VERSION_NAME,
+                    )
+                },
+            )
+            UpdateScreen(
                 viewModel = viewModel,
                 onDone = { navController.popBackStack() },
             )
