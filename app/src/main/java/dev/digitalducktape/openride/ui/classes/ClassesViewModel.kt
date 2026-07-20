@@ -1,18 +1,25 @@
 package dev.digitalducktape.openride.ui.classes
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import dev.digitalducktape.openride.core.content.ChannelSection
+import dev.digitalducktape.openride.core.content.Video
 import dev.digitalducktape.openride.core.content.YouTubeContentRepository
 import dev.digitalducktape.openride.core.data.RideRepository
 import dev.digitalducktape.openride.core.profile.ActiveProfileHolder
 import dev.digitalducktape.openride.core.ride.RideSessionManager
+import kotlin.random.Random
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 
 /**
  * Classes tab (PRD P0-6, T10): loads each configured channel's videos via
@@ -31,10 +38,64 @@ class ClassesViewModel(
     private val rideSessionManager: RideSessionManager,
     private val activeProfileHolder: ActiveProfileHolder,
     rideRepository: RideRepository,
+    private val random: Random = Random.Default,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<ClassesUiState>(ClassesUiState.Loading)
     val uiState: StateFlow<ClassesUiState> = _uiState.asStateFlow()
+
+    private val _filters = MutableStateFlow(ClassFilters())
+    val filters: StateFlow<ClassFilters> = _filters.asStateFlow()
+
+    /**
+     * Bumped whenever Random sort is (re-)selected, so the shuffle is stable while the rider
+     * scrolls but reshuffles when they ask for a new order.
+     */
+    private val shuffleSeed = MutableStateFlow(random.nextLong())
+
+    private val loadedSections: StateFlow<List<ChannelSection>> = _uiState
+        .map { state -> (state as? ClassesUiState.Loaded)?.sections.orEmpty() }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    /** Creator rows for browse mode — already narrowed to the chosen category. */
+    val rows: StateFlow<List<ChannelSection>> = combine(loadedSections, _filters) { sections, filters ->
+        ClassFiltering.rows(sections, filters.category).filter { it.videos.isNotEmpty() }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    /** The flat grid, or `null` while the tab should show creator rows instead. */
+    val gridVideos: StateFlow<List<Video>?> =
+        combine(loadedSections, _filters, shuffleSeed) { sections, filters, seed ->
+            if (filters.isDefaultBrowse) {
+                null
+            } else {
+                ClassFiltering.grid(sections, filters, Random(seed))
+            }
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    fun setCategory(category: CategoryFilter) {
+        _filters.value = _filters.value.copy(category = category)
+    }
+
+    fun setSort(sort: ClassSort) {
+        if (sort == ClassSort.Random) shuffleSeed.value = random.nextLong()
+        _filters.value = _filters.value.copy(sort = sort)
+    }
+
+    fun setLength(length: LengthFilter) {
+        _filters.value = _filters.value.copy(length = length)
+    }
+
+    /**
+     * A uniformly random class from everything the current filters allow — the Random Ride
+     * button. Returns `null` when nothing matches (button is disabled in that state), and
+     * deliberately ignores the *sort*, which only affects presentation order.
+     */
+    fun randomVideo(): Video? =
+        ClassFiltering.grid(
+            loadedSections.value,
+            _filters.value.copy(sort = ClassSort.Newest),
+            random,
+        ).randomOrNull(random)
 
     /**
      * When the active profile last rode each class, keyed by video id (v2 "taken" badges).
