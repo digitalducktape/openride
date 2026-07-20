@@ -7,8 +7,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -28,7 +28,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import dev.digitalducktape.openride.core.ride.RideGoal
 import dev.digitalducktape.openride.core.route.RoutePosition
@@ -58,6 +57,15 @@ fun InRideScreen(
 
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(modifier = Modifier.fillMaxSize()) {
+            // Goal progress runs across the very top edge (matching the video ride's strip).
+            uiState.goalProgress?.let { progress ->
+                LinearProgressIndicator(
+                    progress = { progress.toFloat() },
+                    modifier = Modifier.fillMaxWidth().height(3.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = OpenRideColors.Divider,
+                )
+            }
             if (!uiState.sensorsAvailable) {
                 SensorFailureBanner()
             }
@@ -68,23 +76,23 @@ fun InRideScreen(
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 Column(
                     modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(top = 20.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
+                        .align(Alignment.TopStart)
+                        .padding(top = 20.dp, start = 32.dp),
                 ) {
                     Text(
                         text = TimeFormat.elapsed(uiState.elapsedSec),
                         style = MetricTextStyles.TimerDisplay,
                         color = MaterialTheme.colorScheme.onBackground,
-                        textAlign = TextAlign.Center,
                     )
-                    if (uiState.goal != RideGoal.None) {
-                        GoalProgressRow(
-                            goal = uiState.goal,
-                            progress = uiState.goalProgress ?: 0.0,
-                            modifier = Modifier.width(360.dp).padding(top = 8.dp),
-                        )
-                    }
+                    Text(
+                        text = if (uiState.goal != RideGoal.None) {
+                            "ELAPSED · ${goalShortLabel(uiState.goal)}"
+                        } else {
+                            "ELAPSED"
+                        },
+                        style = MetricTextStyles.UnitLabel,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
 
                 Row(
@@ -265,36 +273,10 @@ private fun RouteProgressRow(
 /** Miles are the app's display unit; routes are measured in metres. */
 private const val METERS_PER_MILE = 1609.344
 
-/** Live progress toward the rider's pre-ride goal (PRD P1-3). */
-@Composable
-private fun GoalProgressRow(goal: RideGoal, progress: Double, modifier: Modifier = Modifier) {
-    val label = when (goal) {
-        is RideGoal.Duration -> "Goal: ${TimeFormat.elapsed(goal.targetSec)}"
-        is RideGoal.Output -> "Goal: %.0f kJ".format(goal.targetKj)
-        RideGoal.None -> ""
-    }
-    Column(modifier = modifier) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(
-                text = label,
-                style = MetricTextStyles.TileLabel,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                text = "${(progress * 100).toInt()}%",
-                style = MetricTextStyles.TileLabel,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        LinearProgressIndicator(
-            progress = { progress.toFloat() },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 6.dp),
-            color = MaterialTheme.colorScheme.primary,
-        )
-    }
+/** Compact goal readout for the timer's sub-label (PRD P1-3) — the top-edge hairline
+ *  carries the progress itself. */
+private fun goalShortLabel(goal: RideGoal): String = when (goal) {
+    is RideGoal.Duration -> "GOAL ${TimeFormat.elapsed(goal.targetSec)}"
+    is RideGoal.Output -> "GOAL %.0f KJ".format(goal.targetKj)
+    RideGoal.None -> ""
 }
