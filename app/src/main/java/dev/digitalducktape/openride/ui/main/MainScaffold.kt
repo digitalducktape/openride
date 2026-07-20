@@ -120,6 +120,9 @@ fun MainScaffold(
                     onStartVideoRide = { videoId ->
                         outerNavController.navigate(Destinations.videoRide(videoId))
                     },
+                    onOpenCreator = { sourceId ->
+                        outerNavController.navigate(Destinations.creator(sourceId))
+                    },
                 )
             }
             composable(MainTabs.History) {

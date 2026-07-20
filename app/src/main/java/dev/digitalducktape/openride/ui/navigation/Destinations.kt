@@ -36,6 +36,13 @@ object Destinations {
     const val VideoRide = "$VideoRideBase/{$VideoIdArg}"
 
     fun videoRide(videoId: String) = "$VideoRideBase/$videoId"
+
+    /** A creator's own page: their recent classes plus the playlists they've curated. */
+    private const val CreatorBase = "creator"
+    const val SourceIdArg = "sourceId"
+    const val Creator = "$CreatorBase/{$SourceIdArg}"
+
+    fun creator(sourceId: Long) = "$CreatorBase/$sourceId"
 }
 
 /** Nested-tab routes inside [Destinations.Main]'s inner `NavHost`. */
