@@ -35,6 +35,16 @@
          through — there is no baked-in update endpoint. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!-- Profile avatar photos are taken by handing ACTION_IMAGE_CAPTURE to whatever camera app
+         the tablet has (so OpenRide itself never needs the CAMERA permission). On API 30+,
+         package visibility filtering hides that app unless the intent is declared here — without
+         this the launch just fails as "no camera app available". -->
+    <queries>
+        <intent>
+            <action android:name="android.media.action.IMAGE_CAPTURE" />
+        </intent>
+    </queries>
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"

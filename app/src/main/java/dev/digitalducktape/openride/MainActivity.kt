@@ -5,6 +5,7 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -26,6 +27,19 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         hideSystemBars()
+
+        // The WebView class player can make the system re-show the bars on its first video
+        // play (media playback tickles the system UI without any window-focus change, so
+        // onWindowFocusChanged never fires) — leaving the nav bar parked over the metrics
+        // bar. Watching the insets catches every "bars became visible" path and re-hides.
+        ViewCompat.setOnApplyWindowInsetsListener(window.decorView) { _, insets ->
+            if (insets.isVisible(WindowInsetsCompat.Type.systemBars())) hideSystemBars()
+            insets
+        }
+
+        // Rolling automatic backup + silent restore-on-empty (see AutoBackupManager) so an
+        // app update or reinstall never silently loses profiles and ride history.
+        appContainer.autoBackupManager.start()
 
         // PRD P1-4, T17: eagerly construct (the container property is `by lazy`) so the
         // heart-rate manager starts observing the active profile's paired strap from launch,

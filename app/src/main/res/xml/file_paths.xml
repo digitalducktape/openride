@@ -5,4 +5,7 @@
     <cache-path name="exports" path="exports/" />
     <!-- Downloaded update APKs (PRD #22/T22), handed to the system package installer. -->
     <cache-path name="updates" path="updates/" />
+    <!-- Raw camera captures for profile photos, handed to the camera app as the
+         TakePicture output target; AvatarPhotoStore crops them and deletes the raw file. -->
+    <cache-path name="avatar_capture" path="avatar_capture/" />
 </paths>

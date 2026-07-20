@@ -33,6 +33,12 @@ interface RideDao {
     @Query("SELECT * FROM ride_samples WHERE rideId = :rideId ORDER BY tSec ASC")
     suspend fun getSamples(rideId: Long): List<RideSample>
 
+    /** Total ride count across all profiles — a cheap "did ride data change?" signal for
+     *  [dev.digitalducktape.openride.core.backup.AutoBackupManager] (samples only ever change
+     *  together with their ride, so ride count covers both). */
+    @Query("SELECT COUNT(*) FROM rides")
+    fun observeRideCount(): Flow<Int>
+
     /** Most recent take of each class this profile has ridden (v2 "taken" badges). */
     @Query(
         "SELECT videoId, MAX(startEpochMs) AS lastTakenEpochMs FROM rides " +

@@ -2,8 +2,11 @@ package dev.digitalducktape.openride.core.backup
 
 import androidx.room.RoomDatabase
 import androidx.room.withTransaction
+import dev.digitalducktape.openride.core.data.Profile
 import dev.digitalducktape.openride.core.data.ProfileDao
 import dev.digitalducktape.openride.core.data.RideDao
+import dev.digitalducktape.openride.core.profile.AvatarPhotoStore
+import java.util.Base64
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 
@@ -12,11 +15,17 @@ import kotlinx.serialization.json.Json
  * a single point of failure for years of ride history. Backs up every profile, ride, and
  * per-second sample as one JSON [BackupSnapshot]; restoring replaces the current database
  * entirely inside one transaction (all-or-nothing).
+ *
+ * @param avatarPhotoStore where rider avatar photos live on disk. When provided, each
+ *   profile's photo travels *inside* the backup as base64 bytes and is re-materialized as a
+ *   fresh file on restore, so photos survive reinstalls the same way ride data does. `null`
+ *   (tests without photo concerns) simply leaves photos out.
  */
 class BackupRepository(
     private val database: RoomDatabase,
     private val profileDao: ProfileDao,
     private val rideDao: RideDao,
+    private val avatarPhotoStore: AvatarPhotoStore? = null,
     private val epochMillisProvider: () -> Long = System::currentTimeMillis,
 ) {
     private val json = Json {
@@ -27,10 +36,16 @@ class BackupRepository(
     /** Builds a snapshot of the database's current contents. */
     suspend fun createSnapshot(): BackupSnapshot = BackupSnapshot(
         exportedAtEpochMs = epochMillisProvider(),
-        profiles = profileDao.getAllOnce().map { it.toBackup() },
+        profiles = profileDao.getAllOnce().map { profile ->
+            profile.toBackup().copy(avatarPhotoBase64 = encodePhoto(profile))
+        },
         rides = rideDao.getAllRidesOnce().map { it.toBackup() },
         samples = rideDao.getAllSamplesOnce().map { it.toBackup() },
     )
+
+    private fun encodePhoto(profile: Profile): String? = profile.avatarPhotoPath
+        ?.let { path -> avatarPhotoStore?.readBytes(path) }
+        ?.let { bytes -> Base64.getEncoder().encodeToString(bytes) }
 
     /** [createSnapshot] serialized to a JSON string ready to write to a shareable file. */
     suspend fun exportJson(): String = json.encodeToString(BackupSnapshot.serializer(), createSnapshot())
@@ -58,14 +73,23 @@ class BackupRepository(
         require(snapshot.version <= BackupSnapshot.CURRENT_VERSION) {
             "Backup version ${snapshot.version} is newer than this app supports (${BackupSnapshot.CURRENT_VERSION})"
         }
+        // Photo files are written before the DB transaction (file IO inside a Room transaction
+        // is asking for trouble); a failed restore at worst leaves a few orphaned photo files.
+        val restoredProfiles = snapshot.profiles.map { backup ->
+            backup.toEntity().copy(avatarPhotoPath = restorePhoto(backup))
+        }
         database.withTransaction {
             rideDao.deleteAllSamples()
             rideDao.deleteAllRides()
             profileDao.deleteAll()
 
-            profileDao.insertAll(snapshot.profiles.map { it.toEntity() })
+            profileDao.insertAll(restoredProfiles)
             rideDao.insertRides(snapshot.rides.map { it.toEntity() })
             rideDao.insertSamples(snapshot.samples.map { it.toEntity() })
         }
     }
+
+    private fun restorePhoto(backup: ProfileBackup): String? = backup.avatarPhotoBase64
+        ?.let { encoded -> runCatching { Base64.getDecoder().decode(encoded) }.getOrNull() }
+        ?.let { bytes -> avatarPhotoStore?.saveBytes(bytes) }
 }

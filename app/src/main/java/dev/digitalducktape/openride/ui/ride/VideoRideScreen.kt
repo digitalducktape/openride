@@ -2,6 +2,7 @@ package dev.digitalducktape.openride.ui.ride
 
 import android.annotation.SuppressLint
 import android.view.ViewGroup
+import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -20,11 +21,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.height
@@ -51,9 +54,10 @@ import kotlinx.coroutines.launch
  * YouTube's native player controls are always reachable and never permanently covered —
  * part of the ToS stance recorded in docs/DECISIONS.md.
  *
- * Ride state comes from the same [InRideViewModel] as the plain in-ride screen: pausing
- * here pauses the *ride*, not the video (video-sync is an explicit non-goal for v2, see
- * the spec).
+ * Ride state comes from the same [InRideViewModel] as the plain in-ride screen, and the
+ * video tracks it: pausing the ride (Pause button or freewheel auto-pause) pauses the video
+ * through the player API, resuming resumes it, and the video reaching its end finishes the
+ * workout automatically.
  */
 @Composable
 fun VideoRideScreen(
@@ -67,8 +71,22 @@ fun VideoRideScreen(
     var overlayVisible by remember { mutableStateOf(true) }
     var showEndConfirmation by remember { mutableStateOf(false) }
 
+    // Shared by the End Ride dialog and the video-completion auto-end. endRide() returns
+    // null if the ride is already over, so the two paths can't double-fire navigation.
+    val endRideAndShowSummary: () -> Unit = {
+        scope.launch {
+            val ride = viewModel.endRide()
+            if (ride != null) onRideEnded(ride.id)
+        }
+    }
+
     Box(modifier = modifier.fillMaxSize().background(Color.Black)) {
-        ClassPlayer(videoId = videoId, modifier = Modifier.fillMaxSize())
+        ClassPlayer(
+            videoId = videoId,
+            paused = uiState.isPaused,
+            onVideoEnded = endRideAndShowSummary,
+            modifier = Modifier.fillMaxSize(),
+        )
 
         if (overlayVisible) {
             // Full-screen tap catcher: any tap on the video area tucks the overlay away so
@@ -113,10 +131,7 @@ fun VideoRideScreen(
             confirmButton = {
                 TextButton(onClick = {
                     showEndConfirmation = false
-                    scope.launch {
-                        val ride = viewModel.endRide()
-                        if (ride != null) onRideEnded(ride.id)
-                    }
+                    endRideAndShowSummary()
                 }) {
                     Text("End Ride")
                 }
@@ -130,11 +145,21 @@ fun VideoRideScreen(
     }
 }
 
-/** The WebView hosting YouTube's embedded player. Created once per [videoId]. */
+/**
+ * The WebView hosting YouTube's embedded player. Created once per [videoId]. [paused]
+ * mirrors the *ride's* paused state into the player (see [YouTubeEmbed] for the page-side
+ * functions), and [onVideoEnded] fires — already on the UI thread — when playback completes.
+ */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-private fun ClassPlayer(videoId: String, modifier: Modifier = Modifier) {
+private fun ClassPlayer(
+    videoId: String,
+    paused: Boolean,
+    onVideoEnded: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     var webView by remember { mutableStateOf<WebView?>(null) }
+    val currentOnVideoEnded by rememberUpdatedState(onVideoEnded)
 
     AndroidView(
         modifier = modifier,
@@ -150,6 +175,12 @@ private fun ClassPlayer(videoId: String, modifier: Modifier = Modifier) {
                 settings.mediaPlaybackRequiresUserGesture = false
                 webViewClient = WebViewClient()
                 webChromeClient = WebChromeClient()
+                addJavascriptInterface(
+                    // JS-interface methods arrive on a WebView-internal thread; hop to the
+                    // UI thread before touching Compose/navigation state.
+                    VideoEndBridge { post { currentOnVideoEnded() } },
+                    YouTubeEmbed.BRIDGE_NAME,
+                )
                 loadDataWithBaseURL(
                     YouTubeEmbed.BASE_URL,
                     YouTubeEmbed.html(videoId),
@@ -162,6 +193,10 @@ private fun ClassPlayer(videoId: String, modifier: Modifier = Modifier) {
         },
     )
 
+    LaunchedEffect(webView, paused) {
+        webView?.evaluateJavascript(if (paused) "openridePause()" else "openrideResume()", null)
+    }
+
     DisposableEffect(Unit) {
         onDispose {
             webView?.apply {
@@ -172,6 +207,12 @@ private fun ClassPlayer(videoId: String, modifier: Modifier = Modifier) {
             }
         }
     }
+}
+
+/** Page → app callback surface injected as `window.OpenRideBridge` (see [YouTubeEmbed]). */
+private class VideoEndBridge(private val onEnded: () -> Unit) {
+    @JavascriptInterface
+    fun onVideoEnded() = onEnded()
 }
 
 @Composable

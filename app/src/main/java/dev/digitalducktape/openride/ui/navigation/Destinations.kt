@@ -10,6 +10,10 @@ package dev.digitalducktape.openride.ui.navigation
 object Destinations {
     const val ProfileSelect = "profile_select"
     const val ProfileCreate = "profile_create"
+
+    /** Edit the active rider's profile fields (feedback: editable profile), from the Profile tab. */
+    const val ProfileEdit = "profile_edit"
+
     const val Main = "main"
     const val InRide = "in_ride"
 

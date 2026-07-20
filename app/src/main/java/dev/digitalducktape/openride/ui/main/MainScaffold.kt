@@ -70,6 +70,18 @@ fun MainScaffold(
     val backStackEntry by innerNavController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
 
+    // Same options whether a tab comes from the bottom bar or an in-screen shortcut (the
+    // home header's avatar chip): single top, state saved/restored per tab.
+    fun navigateToTab(route: String) {
+        innerNavController.navigate(route) {
+            popUpTo(innerNavController.graph.findStartDestination().id) {
+                saveState = true
+            }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
+
     Column(modifier = modifier.fillMaxSize()) {
         NavHost(
             navController = innerNavController,
@@ -89,6 +101,7 @@ fun MainScaffold(
                 HomeScreen(
                     viewModel = viewModel,
                     onQuickStart = { outerNavController.navigate(Destinations.InRide) },
+                    onOpenProfile = { navigateToTab(MainTabs.Profile) },
                 )
             }
             composable(MainTabs.Classes) {
@@ -134,6 +147,7 @@ fun MainScaffold(
                 )
                 ProfileTabScreen(
                     viewModel = viewModel,
+                    onEditProfile = { outerNavController.navigate(Destinations.ProfileEdit) },
                     onSwitchRider = {
                         outerNavController.navigate(Destinations.ProfileSelect) {
                             popUpTo(Destinations.Main) { inclusive = true }
@@ -170,15 +184,7 @@ fun MainScaffold(
             TABS.forEach { tab ->
                 NavigationBarItem(
                     selected = currentRoute == tab.route,
-                    onClick = {
-                        innerNavController.navigate(tab.route) {
-                            popUpTo(innerNavController.graph.findStartDestination().id) {
-                                saveState = true
-                            }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    },
+                    onClick = { navigateToTab(tab.route) },
                     icon = { Icon(imageVector = tab.icon, contentDescription = tab.label) },
                     label = { Text(text = tab.label) },
                     colors = NavigationBarItemDefaults.colors(

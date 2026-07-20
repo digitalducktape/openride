@@ -4,8 +4,10 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.digitalducktape.openride.core.data.OpenRideDatabase
+import dev.digitalducktape.openride.core.data.Profile
 import dev.digitalducktape.openride.core.data.ProfileRepository
 import dev.digitalducktape.openride.core.profile.ActiveProfileHolder
+import dev.digitalducktape.openride.core.profile.WeightUnits
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -17,12 +19,12 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
-class ProfileCreateViewModelTest {
+class ProfileEditorViewModelTest {
 
     private lateinit var db: OpenRideDatabase
     private lateinit var profileRepository: ProfileRepository
     private lateinit var activeProfileHolder: ActiveProfileHolder
-    private lateinit var viewModel: ProfileCreateViewModel
+    private lateinit var viewModel: ProfileEditorViewModel
 
     @Before
     fun setUp() {
@@ -30,13 +32,18 @@ class ProfileCreateViewModelTest {
         db = Room.inMemoryDatabaseBuilder(context, OpenRideDatabase::class.java).build()
         profileRepository = ProfileRepository(db.profileDao())
         activeProfileHolder = ActiveProfileHolder(context)
-        viewModel = ProfileCreateViewModel(profileRepository, activeProfileHolder)
+        // SharedPreferences persist across Robolectric tests in the same run; start clean so
+        // "nothing was saved" assertions can't pass/fail on a leftover active id.
+        activeProfileHolder.clear()
+        viewModel = ProfileEditorViewModel(profileRepository, activeProfileHolder)
     }
 
     @After
     fun tearDown() {
         db.close()
     }
+
+    // --- Create mode ------------------------------------------------------------------------
 
     @Test
     fun `blank name is rejected with an error and nothing is saved`() = runTest {
@@ -130,16 +137,18 @@ class ProfileCreateViewModelTest {
     }
 
     @Test
-    fun `valid weight and FTP are parsed and saved`() = runTest {
+    fun `weight is entered in lbs and stored as kg`() = runTest {
         viewModel.onNameChange("Ed")
-        viewModel.onWeightChange("80.5")
+        viewModel.onWeightChange("176.4")
         viewModel.onFtpChange("220")
 
         val result = viewModel.save()
 
         assertTrue(result)
         val saved = profileRepository.getProfile(activeProfileHolder.activeProfileId.value!!)
-        assertEquals(80.5, saved!!.weightKg!!, 0.0001)
+        assertEquals(WeightUnits.lbsToKg(176.4), saved!!.weightKg!!, 0.0001)
+        // ~80 kg — checks the conversion direction, not just that the helper round-trips.
+        assertEquals(80.0, saved.weightKg!!, 0.05)
         assertEquals(220, saved.ftp)
     }
 
@@ -150,7 +159,7 @@ class ProfileCreateViewModelTest {
         viewModel.save()
         assertNotNull(viewModel.uiState.value.weightError)
 
-        viewModel.onWeightChange("70")
+        viewModel.onWeightChange("170")
 
         assertNull(viewModel.uiState.value.weightError)
     }
@@ -166,5 +175,101 @@ class ProfileCreateViewModelTest {
         val saved = profileRepository.getProfile(activeProfileHolder.activeProfileId.value!!)
         assertEquals(AvatarOptions.colors[2], saved!!.avatarColor)
         assertEquals(AvatarOptions.emojis[3], saved.avatarEmoji)
+    }
+
+    @Test
+    fun `a captured photo path persists on the saved profile and can be removed`() = runTest {
+        viewModel.onNameChange("Ed")
+        viewModel.onPhotoCaptured("/data/avatars/a.jpg")
+
+        viewModel.save()
+
+        val saved = profileRepository.getProfile(activeProfileHolder.activeProfileId.value!!)
+        assertEquals("/data/avatars/a.jpg", saved!!.avatarPhotoPath)
+
+        viewModel.onPhotoRemoved()
+        assertNull(viewModel.uiState.value.avatarPhotoPath)
+    }
+
+    // --- Edit mode --------------------------------------------------------------------------
+
+    private suspend fun seedActiveProfile(): Long {
+        val id = profileRepository.createProfile(
+            Profile(
+                name = "Ed",
+                avatarEmoji = "🚴",
+                avatarColor = AvatarOptions.colors[1],
+                weightKg = 80.0,
+                ftp = 220,
+                pairedHrDeviceAddress = "AA:BB:CC:DD:EE:FF",
+                avatarPhotoPath = "/data/avatars/old.jpg",
+            ),
+        )
+        activeProfileHolder.setActiveProfile(id)
+        return id
+    }
+
+    private fun editorForActiveProfile() =
+        ProfileEditorViewModel(profileRepository, activeProfileHolder, editActiveProfile = true)
+
+    @Test
+    fun `loadForEdit prefills the form from the active profile, weight in lbs`() = runTest {
+        seedActiveProfile()
+        val editor = editorForActiveProfile()
+
+        editor.loadForEdit()
+
+        val state = editor.uiState.value
+        assertEquals("Ed", state.name)
+        assertEquals("🚴", state.avatarEmoji)
+        assertEquals(AvatarOptions.colors[1], state.avatarColor)
+        assertEquals("/data/avatars/old.jpg", state.avatarPhotoPath)
+        assertEquals(WeightUnits.formatLbs(80.0), state.weightLbsInput)
+        assertEquals("220", state.ftpInput)
+    }
+
+    @Test
+    fun `loadForEdit only loads once so in-progress edits are not clobbered`() = runTest {
+        seedActiveProfile()
+        val editor = editorForActiveProfile()
+        editor.loadForEdit()
+
+        editor.onNameChange("Edward")
+        editor.loadForEdit()
+
+        assertEquals("Edward", editor.uiState.value.name)
+    }
+
+    @Test
+    fun `saving in edit mode updates the profile in place and preserves the HR pairing`() = runTest {
+        val id = seedActiveProfile()
+        val editor = editorForActiveProfile()
+        editor.loadForEdit()
+
+        editor.onNameChange("Edward")
+        editor.onWeightChange("165")
+        editor.onFtpChange("230")
+        val result = editor.save()
+
+        assertTrue(result)
+        val updated = profileRepository.getProfile(id)
+        assertEquals("Edward", updated!!.name)
+        assertEquals(WeightUnits.lbsToKg(165.0), updated.weightKg!!, 0.0001)
+        assertEquals(230, updated.ftp)
+        // Fields the form doesn't cover survive an edit.
+        assertEquals("AA:BB:CC:DD:EE:FF", updated.pairedHrDeviceAddress)
+        assertEquals(id, activeProfileHolder.activeProfileId.value)
+    }
+
+    @Test
+    fun `saving in edit mode can clear the weight by blanking the field`() = runTest {
+        val id = seedActiveProfile()
+        val editor = editorForActiveProfile()
+        editor.loadForEdit()
+
+        editor.onWeightChange("")
+        editor.save()
+
+        assertNull(profileRepository.getProfile(id)!!.weightKg)
     }
 }

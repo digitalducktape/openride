@@ -1,15 +1,13 @@
 package dev.digitalducktape.openride.ui.home
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -25,11 +23,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.digitalducktape.openride.core.ride.RideGoal
+import dev.digitalducktape.openride.ui.common.ProfileAvatar
 import dev.digitalducktape.openride.ui.theme.MetricTextStyles
 
 /**
@@ -41,6 +39,7 @@ import dev.digitalducktape.openride.ui.theme.MetricTextStyles
 fun HomeScreen(
     viewModel: HomeViewModel,
     onQuickStart: () -> Unit,
+    onOpenProfile: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val activeProfile by viewModel.activeProfile.collectAsState(initial = null)
@@ -66,18 +65,13 @@ fun HomeScreen(
                         modifier = Modifier.padding(top = 4.dp),
                     )
                 }
-                Box(
-                    modifier = Modifier
-                        .size(56.dp)
-                        .background(
-                            color = activeProfile?.let { Color(it.avatarColor) }
-                                ?: MaterialTheme.colorScheme.surfaceVariant,
-                            shape = CircleShape,
-                        ),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(text = activeProfile?.avatarEmoji ?: "👤", fontSize = 26.sp)
-                }
+                // Tapping the rider's own face is the natural "go to my profile" gesture.
+                ProfileAvatar(
+                    profile = activeProfile,
+                    size = 56.dp,
+                    emojiSize = 26.sp,
+                    modifier = Modifier.clickable(onClick = onOpenProfile),
+                )
             }
 
             // Hero card: the one big action on this screen.

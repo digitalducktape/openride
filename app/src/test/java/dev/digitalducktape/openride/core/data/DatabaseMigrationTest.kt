@@ -138,6 +138,35 @@ class DatabaseMigrationTest {
     }
 
     @Test
+    fun `migrate 3 to 4 preserves profiles and adds a null avatarPhotoPath`() {
+        val db = openV1Database()
+        MIGRATION_1_2.migrate(db)
+        MIGRATION_2_3.migrate(db)
+        db.execSQL(
+            "INSERT INTO profiles (id, name, avatarEmoji, avatarColor, weightKg, ftp) " +
+                "VALUES (1, 'Ed', '🚴', -16711936, 80.0, 220)",
+        )
+
+        MIGRATION_3_4.migrate(db)
+
+        db.query("SELECT name, weightKg, avatarPhotoPath FROM profiles WHERE id = 1").use {
+            assertEquals(true, it.moveToFirst())
+            assertEquals("Ed", it.getString(it.getColumnIndexOrThrow("name")))
+            assertEquals(80.0, it.getDouble(it.getColumnIndexOrThrow("weightKg")), 0.001)
+            assertEquals(true, it.isNull(it.getColumnIndexOrThrow("avatarPhotoPath")))
+        }
+
+        db.execSQL(
+            "INSERT INTO profiles (id, name, avatarEmoji, avatarColor, weightKg, ftp, avatarPhotoPath) " +
+                "VALUES (2, 'Kid', '🤖', -65536, NULL, NULL, '/data/avatars/kid.jpg')",
+        )
+        db.query("SELECT avatarPhotoPath FROM profiles WHERE id = 2").use {
+            assertEquals(true, it.moveToFirst())
+            assertEquals("/data/avatars/kid.jpg", it.getString(it.getColumnIndexOrThrow("avatarPhotoPath")))
+        }
+    }
+
+    @Test
     fun `migrate 1 to 2 lets new rows populate both new columns`() {
         val db = openV1Database()
 
