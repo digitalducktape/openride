@@ -23,12 +23,18 @@ import dev.digitalducktape.openride.core.ride.RideSessionManager
 import dev.digitalducktape.openride.core.ride.RideSessionState
 import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -47,6 +53,10 @@ class ClassesViewModelTest {
 
     @Before
     fun setUp() = runTest {
+        // ClassesViewModel's filter/grid/rows flows are stateIn'd against viewModelScope
+        // (SharingStarted.Eagerly), so Main needs to be the test dispatcher for runTest to
+        // drive them deterministically — same reasoning as HrPairingViewModelTest.
+        Dispatchers.setMain(UnconfinedTestDispatcher())
         db = Room.inMemoryDatabaseBuilder(context, OpenRideDatabase::class.java).build()
         profileRepository = ProfileRepository(db.profileDao())
         rideRepository = RideRepository(db, db.rideDao())
@@ -61,6 +71,7 @@ class ClassesViewModelTest {
     @After
     fun tearDown() {
         db.close()
+        Dispatchers.resetMain()
     }
 
     private fun fixtureXml() =
@@ -204,5 +215,66 @@ class ClassesViewModelTest {
         val (viewModel, _) = viewModel(backgroundScope)
 
         assertEquals(emptyMap<String, Long>(), viewModel.takenVideos.first())
+    }
+
+    @Test
+    fun `filters start at newest with no category or length restriction`() = runTest {
+        val (viewModel, _) = viewModel(backgroundScope)
+
+        assertEquals(ClassFilters(), viewModel.filters.value)
+    }
+
+    @Test
+    fun `setting a length filter switches the screen into grid mode`() = runTest {
+        val (viewModel, _) = viewModel(backgroundScope)
+        viewModel.refresh()
+
+        assertNull(viewModel.gridVideos.value)
+
+        viewModel.setLength(LengthFilter.Over45)
+
+        assertNotNull(viewModel.gridVideos.value)
+    }
+
+    @Test
+    fun `category filtering applies to the rows in browse mode`() = runTest {
+        val (viewModel, _) = viewModel(backgroundScope)
+        viewModel.refresh()
+
+        viewModel.setCategory(CategoryFilter.Workout)
+
+        // The seeded test source is Scenic, so a Workout filter empties the rows.
+        assertTrue(viewModel.rows.value.isEmpty())
+
+        viewModel.setCategory(CategoryFilter.Scenic)
+
+        assertEquals(1, viewModel.rows.value.size)
+    }
+
+    @Test
+    fun `randomVideo returns null before content has loaded`() = runTest {
+        val (viewModel, _) = viewModel(backgroundScope)
+
+        assertNull(viewModel.randomVideo())
+    }
+
+    @Test
+    fun `randomVideo returns a video from the filtered pool`() = runTest {
+        val (viewModel, _) = viewModel(backgroundScope)
+        viewModel.refresh()
+
+        val picked = viewModel.randomVideo()!!
+
+        assertTrue(viewModel.rows.value.single().videos.any { it.id == picked.id })
+    }
+
+    @Test
+    fun `randomVideo returns null when the filters match nothing`() = runTest {
+        val (viewModel, _) = viewModel(backgroundScope)
+        viewModel.refresh()
+
+        viewModel.setCategory(CategoryFilter.Workout)
+
+        assertNull(viewModel.randomVideo())
     }
 }
