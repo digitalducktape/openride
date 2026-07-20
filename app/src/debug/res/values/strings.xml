@@ -1,0 +1,6 @@
+<resources>
+    <!-- Overrides app_name for the mock-data debug build only, so it's distinguishable on the
+         launcher/task-switcher from the debugReal build (real Gen 2 sensor) installed
+         alongside it on the bike tablet. -->
+    <string name="app_name">OpenRide-Test</string>
+</resources>
