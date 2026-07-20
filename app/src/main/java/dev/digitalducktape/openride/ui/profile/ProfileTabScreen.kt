@@ -51,6 +51,7 @@ fun ProfileTabScreen(
     onRestoreComplete: () -> Unit,
     onManageHeartRateStrap: () -> Unit,
     onManageAppUpdates: () -> Unit,
+    onManageContentSources: () -> Unit,
     routeHolder: RouteHolder,
     modifier: Modifier = Modifier,
 ) {
@@ -144,6 +145,13 @@ fun ProfileTabScreen(
                 modifier = Modifier.width(280.dp).padding(top = 16.dp),
             ) {
                 Text("App updates")
+            }
+
+            OutlinedButton(
+                onClick = onManageContentSources,
+                modifier = Modifier.width(280.dp).padding(top = 16.dp),
+            ) {
+                Text("Content sources")
             }
 
             Text(

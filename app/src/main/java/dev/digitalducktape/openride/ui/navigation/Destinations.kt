@@ -23,6 +23,9 @@ object Destinations {
     /** Opt-in self-updater screen (PRD #22/T22), reachable from the Profile tab. */
     const val AppUpdate = "app_update"
 
+    /** Rider-managed Classes catalog (channels and playlists), reachable from the Profile tab. */
+    const val ContentSources = "content_sources"
+
     private const val RideSummaryBase = "ride_summary"
     const val RideIdArg = "rideId"
     const val RideSummary = "$RideSummaryBase/{$RideIdArg}"

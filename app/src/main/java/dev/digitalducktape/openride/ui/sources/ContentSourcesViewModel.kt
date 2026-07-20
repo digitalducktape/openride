@@ -1,0 +1,72 @@
+package dev.digitalducktape.openride.ui.sources
+
+import androidx.lifecycle.ViewModel
+import dev.digitalducktape.openride.core.content.ChannelHandleResolver
+import dev.digitalducktape.openride.core.content.ContentCategory
+import dev.digitalducktape.openride.core.content.ContentSource
+import dev.digitalducktape.openride.core.content.ContentSourceRepository
+import dev.digitalducktape.openride.core.content.ResolvedSource
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+
+/** Where the "add a source" flow currently is. */
+sealed interface AddSourceState {
+    data object Idle : AddSourceState
+
+    data object Resolving : AddSourceState
+
+    /** Resolved and awaiting the rider's category choice — nothing has been saved yet. */
+    data class Resolved(val source: ResolvedSource) : AddSourceState
+
+    data class Failed(val message: String) : AddSourceState
+}
+
+/**
+ * The Content Sources settings screen: which creators and playlists the Classes tab draws
+ * from.
+ *
+ * Adding is deliberately two-step — resolve, then confirm with a category — because a pasted
+ * link resolves to a name the rider should see before it becomes a row on their Classes tab,
+ * and because a failed resolution must never leave a half-configured source behind.
+ */
+class ContentSourcesViewModel(
+    private val sourceRepository: ContentSourceRepository,
+    private val resolver: ChannelHandleResolver,
+) : ViewModel() {
+
+    val sources: Flow<List<ContentSource>> = sourceRepository.observeAll()
+
+    private val _addState = MutableStateFlow<AddSourceState>(AddSourceState.Idle)
+    val addState: StateFlow<AddSourceState> = _addState.asStateFlow()
+
+    suspend fun resolve(input: String) {
+        _addState.value = AddSourceState.Resolving
+        _addState.value = resolver.resolve(input).fold(
+            onSuccess = { AddSourceState.Resolved(it) },
+            onFailure = { error ->
+                AddSourceState.Failed(
+                    when (error) {
+                        is java.io.IOException -> "No connection — try again"
+                        else -> "Couldn't find that channel or playlist"
+                    },
+                )
+            },
+        )
+    }
+
+    suspend fun confirmAdd(category: ContentCategory) {
+        val resolved = (_addState.value as? AddSourceState.Resolved)?.source ?: return
+        sourceRepository.add(resolved, category)
+        _addState.value = AddSourceState.Idle
+    }
+
+    fun cancelAdd() {
+        _addState.value = AddSourceState.Idle
+    }
+
+    suspend fun setHidden(id: Long, hidden: Boolean) = sourceRepository.setHidden(id, hidden)
+
+    suspend fun deleteCustom(id: Long) = sourceRepository.deleteCustom(id)
+}
