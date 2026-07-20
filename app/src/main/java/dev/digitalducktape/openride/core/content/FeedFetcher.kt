@@ -4,6 +4,7 @@ import java.io.IOException
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * Fetches raw bytes for a URL. A narrow interface (rather than calling [HttpURLConnection]
@@ -56,9 +57,18 @@ fun FeedFetcher.fetchText(url: String): String =
  * YouTube's feed and page endpoints intermittently answer 404/500 for URLs that are
  * perfectly valid — the same feed URL was observed alternating between 200 and 404 seconds
  * apart. Without this, a healthy channel would randomly fall back to cached content.
+ *
+ * [CancellationException] is rethrown immediately rather than retried: it doesn't mean the
+ * fetch failed, it means the coroutine that wanted the result is gone. Retrying it would do
+ * pointless work after the consumer stopped listening, and swallowing it here would break
+ * structured concurrency by hiding the cancellation from the parent scope. Today's call sites
+ * are synchronous [HttpURLConnection] I/O so this can't yet happen mid-fetch, but [retryingOnce]
+ * is a general-purpose helper and the next caller may not be so lucky.
  */
 fun <T> retryingOnce(block: () -> T): T = try {
     block()
-} catch (first: Exception) {
+} catch (cancellation: CancellationException) {
+    throw cancellation
+} catch (_: Exception) {
     block()
 }
