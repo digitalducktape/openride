@@ -12,7 +12,10 @@ import kotlinx.coroutines.withContext
  * `"externalId"` value embedded in it. That's the same technique used to resolve the built-in
  * catalog in [ChannelConfig].
  */
-class ChannelHandleResolver(private val fetcher: FeedFetcher = HttpUrlFeedFetcher()) {
+class ChannelHandleResolver(
+    private val fetcher: FeedFetcher = HttpUrlFeedFetcher(),
+    private val pageParser: YouTubePageParser = YouTubePageParser(),
+) {
 
     suspend fun resolve(input: String): Result<ResolvedSource> = withContext(Dispatchers.IO) {
         val trimmed = input.trim()
@@ -23,19 +26,31 @@ class ChannelHandleResolver(private val fetcher: FeedFetcher = HttpUrlFeedFetche
         playlistId(trimmed)?.let { playlistId ->
             return@withContext runCatching {
                 val html = retryingOnce { fetcher.fetchText("https://www.youtube.com/playlist?list=$playlistId") }
-                // A playlist that doesn't exist (or a bare handle that merely looked like a
-                // playlist id) still comes back as a normal 200 YouTube page, just one with no
-                // mention of this playlist anywhere in it — no canonical link, no embedded JSON
-                // referencing it. Requiring the id to appear somewhere in the response is the
-                // cheapest signal available (no extra request, no new dependency) that we
-                // actually landed on that playlist rather than an error/redirect page.
-                if (playlistId !in html) {
+                // YouTube answers HTTP 200 for a playlist id that doesn't exist at all, and the
+                // response *echoes the requested id back* in several places that are templated
+                // straight from the request URL — a canonical link, an og:url meta tag, an
+                // embedded "ytUrl"/"originalUrl" pair — so the id appearing in the HTML proves
+                // nothing about whether the playlist is real. What a nonexistent (or emptied)
+                // playlist page never has is any `lockupViewModel` video tile. Reusing
+                // YouTubePageParser to look for at least one actual video is the discriminating
+                // signal: a page with real content parses to a non-empty video list, a
+                // nonexistent one parses to an empty one (or fails to parse at all, if it lacks
+                // ytInitialData entirely). Note this also rejects a playlist that is real but
+                // genuinely empty — that's intended, not an oversight: an empty playlist has no
+                // rides to add, so there's nothing useful to save either way.
+                val displayName = pageTitle(html) ?: "Playlist"
+                val hasVideos = try {
+                    pageParser.parseVideos(html, displayName).isNotEmpty()
+                } catch (e: ContentParseException) {
+                    false
+                }
+                if (!hasVideos) {
                     throw ContentParseException("Couldn't find that playlist")
                 }
                 ResolvedSource(
                     sourceType = ContentSourceType.PLAYLIST,
                     youtubeId = playlistId,
-                    displayName = pageTitle(html) ?: "Playlist",
+                    displayName = displayName,
                 )
             }
         }
