@@ -5,6 +5,9 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -22,6 +25,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        hideSystemBars()
 
         // PRD P1-4, T17: eagerly construct (the container property is `by lazy`) so the
         // heart-rate manager starts observing the active profile's paired strap from launch,
@@ -48,6 +52,27 @@ class MainActivity : ComponentActivity() {
             OpenRideTheme {
                 OpenRideNavHost(appContainer = appContainer)
             }
+        }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        // Bars can be restored by the system (dialogs, app switches); re-hide whenever the
+        // window regains focus so the app stays truly full-screen on the bike.
+        if (hasFocus) hideSystemBars()
+    }
+
+    /**
+     * Full-screen kiosk mode: the tablet's OS navigation bar otherwise overlays the app's
+     * own bottom UI (the in-ride metrics bar especially — the app is edge-to-edge and
+     * deliberately doesn't inset for a bar the rider never needs mid-ride). Immersive
+     * sticky: a swipe from the screen edge shows the system bars transiently, over the
+     * app, then they auto-hide again.
+     */
+    private fun hideSystemBars() {
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            hide(WindowInsetsCompat.Type.systemBars())
         }
     }
 }
