@@ -5,6 +5,7 @@ import dev.digitalducktape.openride.core.content.ChannelHandleResolver
 import dev.digitalducktape.openride.core.content.ContentCategory
 import dev.digitalducktape.openride.core.content.ContentSource
 import dev.digitalducktape.openride.core.content.ContentSourceRepository
+import dev.digitalducktape.openride.core.content.HttpStatusException
 import dev.digitalducktape.openride.core.content.ResolvedSource
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -48,6 +49,11 @@ class ContentSourcesViewModel(
             onFailure = { error ->
                 AddSourceState.Failed(
                     when (error) {
+                        // Checked before the plain IOException branch below: a non-2xx
+                        // response is a subtype of IOException, so a 404 for a mistyped
+                        // handle would otherwise be misreported as a connectivity problem
+                        // (see HttpStatusException's KDoc for why that's actively misleading).
+                        is HttpStatusException -> "Couldn't find that channel or playlist"
                         is java.io.IOException -> "No connection — try again"
                         else -> "Couldn't find that channel or playlist"
                     },

@@ -8,6 +8,7 @@ import dev.digitalducktape.openride.core.content.ContentCategory
 import dev.digitalducktape.openride.core.content.ContentSourceRepository
 import dev.digitalducktape.openride.core.content.ContentSourceType
 import dev.digitalducktape.openride.core.content.FeedFetcher
+import dev.digitalducktape.openride.core.content.HttpStatusException
 import dev.digitalducktape.openride.core.data.OpenRideDatabase
 import java.io.IOException
 import kotlinx.coroutines.flow.first
@@ -101,7 +102,8 @@ class ContentSourcesViewModelTest {
 
         viewModel.resolve("@kaleigh")
 
-        assertTrue(viewModel.addState.value is AddSourceState.Failed)
+        val failed = viewModel.addState.value as AddSourceState.Failed
+        assertEquals("No connection — try again", failed.message)
         assertTrue(repository.observeAll().first().isEmpty())
     }
 
@@ -111,7 +113,21 @@ class ContentSourcesViewModelTest {
 
         viewModel.resolve("@ghost")
 
-        assertTrue(viewModel.addState.value is AddSourceState.Failed)
+        val failed = viewModel.addState.value as AddSourceState.Failed
+        assertEquals("Couldn't find that channel or playlist", failed.message)
+    }
+
+    @Test
+    fun `a non-2xx HTTP response reports not found, not offline`() = runTest {
+        // A 404 for a mistyped handle is not a connectivity failure — it must not be
+        // reported as "No connection", which would send the rider retrying a lookup that
+        // can never succeed. Regression coverage for that mix-up.
+        val viewModel = viewModel(FeedFetcher { throw HttpStatusException(404, "HTTP 404") })
+
+        viewModel.resolve("@typo-handle")
+
+        val failed = viewModel.addState.value as AddSourceState.Failed
+        assertEquals("Couldn't find that channel or playlist", failed.message)
     }
 
     @Test
