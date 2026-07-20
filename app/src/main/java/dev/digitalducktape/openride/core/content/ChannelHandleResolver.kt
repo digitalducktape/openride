@@ -23,6 +23,15 @@ class ChannelHandleResolver(private val fetcher: FeedFetcher = HttpUrlFeedFetche
         playlistId(trimmed)?.let { playlistId ->
             return@withContext runCatching {
                 val html = retryingOnce { fetcher.fetchText("https://www.youtube.com/playlist?list=$playlistId") }
+                // A playlist that doesn't exist (or a bare handle that merely looked like a
+                // playlist id) still comes back as a normal 200 YouTube page, just one with no
+                // mention of this playlist anywhere in it — no canonical link, no embedded JSON
+                // referencing it. Requiring the id to appear somewhere in the response is the
+                // cheapest signal available (no extra request, no new dependency) that we
+                // actually landed on that playlist rather than an error/redirect page.
+                if (playlistId !in html) {
+                    throw ContentParseException("Couldn't find that playlist")
+                }
                 ResolvedSource(
                     sourceType = ContentSourceType.PLAYLIST,
                     youtubeId = playlistId,
@@ -44,10 +53,24 @@ class ChannelHandleResolver(private val fetcher: FeedFetcher = HttpUrlFeedFetche
         }
     }
 
-    /** The `list=` id of a playlist URL, or `null` if [input] isn't one. */
+    /**
+     * The `list=` id of a playlist URL, or `null` if [input] isn't one.
+     *
+     * A bare (non-URL) input only counts as a playlist id if it's actually shaped like one:
+     * real YouTube playlist ids are "PL" followed by a long run of id characters (32 in the
+     * common case), never as short as a typical handle. Without the length floor, a rider
+     * pasting a bare handle like `PLcyclist` would get silently misrouted into the playlist
+     * branch instead of resolving as their channel. A `list=` query parameter is unambiguous
+     * regardless of length, so it's exempt from the floor.
+     */
     private fun playlistId(input: String): String? =
         PLAYLIST_ID.find(input)?.groupValues?.get(1)
-            ?: input.takeIf { it.startsWith("PL") && !it.contains('/') && !it.contains(' ') }
+            ?: input.takeIf {
+                it.startsWith("PL") &&
+                    !it.contains('/') &&
+                    !it.contains(' ') &&
+                    it.length >= MIN_BARE_PLAYLIST_ID_LENGTH
+            }
 
     /**
      * The page to fetch for [input]. A full youtube.com URL is fetched as given (minus any
@@ -83,5 +106,8 @@ class ChannelHandleResolver(private val fetcher: FeedFetcher = HttpUrlFeedFetche
         val EXTERNAL_ID = Regex(""""externalId":"(UC[\w-]+)"""")
         val PLAYLIST_ID = Regex("""[?&]list=(PL[\w-]+)""")
         val TITLE = Regex("""<title>([^<]*)</title>""")
+
+        /** "PL" + at least 14 more chars = 16 total; real playlist ids run to 32+. */
+        const val MIN_BARE_PLAYLIST_ID_LENGTH = 16
     }
 }

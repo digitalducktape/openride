@@ -1,6 +1,7 @@
 package dev.digitalducktape.openride.core.content
 
 import java.io.IOException
+import kotlinx.coroutines.CancellationException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -41,6 +42,18 @@ class RetryingFetchTest {
             }
         }
         assertEquals(2, calls)
+    }
+
+    @Test
+    fun `propagates CancellationException without retrying`() {
+        var calls = 0
+        assertThrows(CancellationException::class.java) {
+            retryingOnce<String> {
+                calls++
+                throw CancellationException("scope cancelled")
+            }
+        }
+        assertEquals(1, calls)
     }
 
     @Test
