@@ -1,13 +1,18 @@
 package dev.digitalducktape.openride.core.content
 
+import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import dev.digitalducktape.openride.core.data.OpenRideDatabase
 import java.io.IOException
 import java.io.InputStream
 import kotlinx.coroutines.test.runTest
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -16,99 +21,201 @@ class YouTubeContentRepositoryTest {
 
     private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
 
-    private val testChannel = ChannelConfig.Channel(
-        id = "UCTestChannel00000000",
-        displayName = "Test Cycling Channel",
-        handle = "@test",
-        category = ContentCategory.Scenic,
-    )
+    private lateinit var db: OpenRideDatabase
+    private lateinit var sources: ContentSourceRepository
 
-    private fun fixtureStream(): InputStream =
+    /** Matches the ids in `fixtures/channel_videos_page.html`: long / short / no-duration. */
+    private fun pageHtml() = readFixture("channel_videos_page.html")
+    private fun playlistsHtml() = readFixture("channel_playlists_page.html")
+
+    private fun readFixture(name: String): String =
+        requireNotNull(javaClass.classLoader?.getResourceAsStream("fixtures/$name"))
+            .bufferedReader().use { it.readText() }
+
+    private fun feedXml(): InputStream =
         requireNotNull(javaClass.classLoader?.getResourceAsStream("fixtures/sample_atom_feed.xml"))
 
-    @Test
-    fun `successful fetch returns parsed videos with refreshFailed false`() = runTest {
-        val repository = YouTubeContentRepository(
-            context = context,
-            channels = listOf(testChannel),
-            fetcher = FeedFetcher { fixtureStream() },
-            cache = ContentCache(context),
+    @Before
+    fun setUp() = runTest {
+        db = Room.inMemoryDatabaseBuilder(context, OpenRideDatabase::class.java).build()
+        sources = ContentSourceRepository(db.contentSourceDao())
+        sources.add(
+            ResolvedSource(ContentSourceType.CHANNEL, "UCTestChannel00000000", "Test Cycling Channel"),
+            ContentCategory.Scenic,
         )
+        context.filesDir.resolve("content_cache").deleteRecursively()
+    }
 
-        val sections = repository.channelSections()
+    @After
+    fun tearDown() = db.close()
 
-        assertEquals(1, sections.size)
-        val section = sections.single()
+    /** Serves page HTML for `/videos` and `/playlists` URLs, and the Atom fixture for feeds. */
+    private fun fetcher(
+        page: (() -> String)? = { pageHtml() },
+        feed: (() -> InputStream)? = { feedXml() },
+        playlists: () -> String = { playlistsHtml() },
+    ) = FeedFetcher { url ->
+        when {
+            url.contains("/playlists") -> playlists().byteInputStream()
+            url.contains("feeds/videos.xml") ->
+                feed?.invoke() ?: throw IOException("feed down")
+            else -> (page?.invoke() ?: throw IOException("page down")).byteInputStream()
+        }
+    }
+
+    private fun repository(fetcher: FeedFetcher) = YouTubeContentRepository(
+        context = context,
+        sourceRepository = sources,
+        fetcher = fetcher,
+        cache = ContentCache(context),
+    )
+
+    @Test
+    fun `page videos carry durations and drop anything under ten minutes`() = runTest {
+        val section = repository(fetcher()).channelSections().single()
+
         assertFalse(section.refreshFailed)
-        assertEquals(3, section.videos.size)
-        assertEquals(testChannel.id, section.channelId)
-        assertEquals(testChannel.category, section.category)
+        // vidShort0002 is 5:04 and must be filtered out; the LIVE tile has no known duration
+        // and is kept.
+        assertEquals(listOf("vidLong00001", "vidNoDur0003"), section.videos.map { it.id })
+        assertEquals(1103, section.videos.first().durationSec)
     }
 
     @Test
-    fun `failed fetch with no prior cache yields empty list and refreshFailed true`() = runTest {
-        val repository = YouTubeContentRepository(
-            context = context,
-            channels = listOf(testChannel),
-            fetcher = FeedFetcher { throw IOException("network down") },
-            cache = ContentCache(context),
-        )
+    fun `section reports the source row it came from`() = runTest {
+        val source = sources.visibleOnce().single()
 
-        val section = repository.channelSections().single()
+        val section = repository(fetcher()).channelSections().single()
+
+        assertEquals(source.id, section.sourceId)
+        assertEquals("UCTestChannel00000000", section.channelId)
+        assertEquals("Test Cycling Channel", section.channelName)
+        assertEquals(ContentCategory.Scenic, section.category)
+    }
+
+    @Test
+    fun `videos absent from the page listing are dropped as non-public`() = runTest {
+        // The Atom fixture's ids are not present in the page fixture, so a successful page
+        // fetch means none of them survive — that's the members-only rule.
+        val section = repository(fetcher()).channelSections().single()
+
+        assertTrue(section.videos.none { it.id.startsWith("video") })
+    }
+
+    @Test
+    fun `a failed page fetch degrades to the feed with unknown durations`() = runTest {
+        val section = repository(fetcher(page = null)).channelSections().single()
+
+        assertFalse(section.refreshFailed)
+        assertEquals(3, section.videos.size)
+        assertTrue(section.videos.all { it.durationSec == null })
+    }
+
+    @Test
+    fun `both fetches failing with no cache yields an empty section flagged as failed`() = runTest {
+        val section = repository(fetcher(page = null, feed = null)).channelSections().single()
 
         assertTrue(section.refreshFailed)
         assertTrue(section.videos.isEmpty())
     }
 
     @Test
-    fun `failed fetch after a prior success falls back to the cached videos`() = runTest {
-        val cache = ContentCache(context)
-        val firstRepository = YouTubeContentRepository(
-            context = context,
-            channels = listOf(testChannel),
-            fetcher = FeedFetcher { fixtureStream() },
-            cache = cache,
-        )
-        firstRepository.channelSections() // primes the cache
+    fun `both fetches failing falls back to the cached list`() = runTest {
+        repository(fetcher()).channelSections() // primes the cache
 
-        val secondRepository = YouTubeContentRepository(
-            context = context,
-            channels = listOf(testChannel),
-            fetcher = FeedFetcher { throw IOException("network down") },
-            cache = cache,
-        )
-        val section = secondRepository.channelSections().single()
+        val section = repository(fetcher(page = null, feed = null)).channelSections().single()
 
         assertTrue(section.refreshFailed)
-        assertEquals(3, section.videos.size)
+        assertEquals(listOf("vidLong00001", "vidNoDur0003"), section.videos.map { it.id })
     }
 
     @Test
-    fun `malformed feed content degrades to fallback instead of throwing`() = runTest {
-        val repository = YouTubeContentRepository(
-            context = context,
-            channels = listOf(testChannel),
-            fetcher = FeedFetcher { "not xml at all".byteInputStream() },
-            cache = ContentCache(context),
-        )
+    fun `a transient failure is retried once before falling back`() = runTest {
+        var attempts = 0
+        val flaky = FeedFetcher { url ->
+            if (url.contains("feeds/videos.xml")) feedXml()
+            else {
+                attempts++
+                if (attempts == 1) throw IOException("HTTP 500") else pageHtml().byteInputStream()
+            }
+        }
 
-        val section = repository.channelSections().single()
+        val section = repository(flaky).channelSections().single()
 
-        assertTrue(section.refreshFailed)
+        assertEquals(2, attempts)
+        assertFalse(section.refreshFailed)
+        assertEquals(1103, section.videos.first().durationSec)
     }
 
     @Test
-    fun `channelSections returns one section per configured channel in order`() = runTest {
-        val secondChannel = testChannel.copy(id = "UCOther", displayName = "Other Channel")
-        val repository = YouTubeContentRepository(
-            context = context,
-            channels = listOf(testChannel, secondChannel),
-            fetcher = FeedFetcher { fixtureStream() },
-            cache = ContentCache(context),
+    fun `hidden sources are not fetched`() = runTest {
+        val source = sources.visibleOnce().single()
+        sources.setHidden(source.id, true)
+
+        assertTrue(repository(fetcher()).channelSections().isEmpty())
+    }
+
+    @Test
+    fun `creatorContent returns the latest videos and the creator's playlists`() = runTest {
+        val source = sources.visibleOnce().single()
+
+        val content = repository(fetcher()).creatorContent(source.id)!!
+
+        assertEquals("Test Cycling Channel", content.displayName)
+        assertEquals(listOf("vidLong00001", "vidNoDur0003"), content.latest.map { it.id })
+        assertEquals(listOf("PLtheme000000001", "PLtheme000000002"), content.playlists.map { it.id })
+        assertFalse(content.refreshFailed)
+    }
+
+    @Test
+    fun `creatorContent returns null for an unknown source id`() = runTest {
+        assertNull(repository(fetcher()).creatorContent(9999L))
+    }
+
+    @Test
+    fun `creatorContent still lists videos when the playlists tab fails`() = runTest {
+        val fetcher = FeedFetcher { url ->
+            when {
+                url.contains("/playlists") -> throw IOException("playlists down")
+                url.contains("feeds/videos.xml") -> feedXml()
+                else -> pageHtml().byteInputStream()
+            }
+        }
+        val source = sources.visibleOnce().single()
+
+        val content = repository(fetcher).creatorContent(source.id)!!
+
+        assertEquals(2, content.latest.size)
+        assertTrue(content.playlists.isEmpty())
+    }
+
+    @Test
+    fun `playlistVideos applies the same duration filter`() = runTest {
+        val videos = repository(fetcher()).playlistVideos("PLtheme000000001", "Themed Rides")
+
+        assertEquals(listOf("vidLong00001", "vidNoDur0003"), videos.map { it.id })
+        assertEquals("Themed Rides", videos.first().channelName)
+    }
+
+    @Test
+    fun `a playlist source is fetched from its playlist page`() = runTest {
+        val playlistId = sources.add(
+            ResolvedSource(ContentSourceType.PLAYLIST, "PLtheme000000001", "Themed Rides"),
+            ContentCategory.Workout,
         )
+        var requestedPlaylistPage = false
+        val fetcher = FeedFetcher { url ->
+            if (url.contains("playlist?list=PLtheme000000001")) requestedPlaylistPage = true
+            when {
+                url.contains("feeds/videos.xml") -> feedXml()
+                else -> pageHtml().byteInputStream()
+            }
+        }
 
-        val sections = repository.channelSections()
+        val sections = repository(fetcher).channelSections()
 
-        assertEquals(listOf(testChannel.id, secondChannel.id), sections.map { it.channelId })
+        assertTrue(requestedPlaylistPage)
+        assertEquals(2, sections.size)
+        assertEquals(playlistId, sections.last().sourceId)
     }
 }

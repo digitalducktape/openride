@@ -5,10 +5,12 @@ package dev.digitalducktape.openride.ui.classes
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import dev.digitalducktape.openride.core.content.ChannelConfig
 import dev.digitalducktape.openride.core.content.ContentCache
 import dev.digitalducktape.openride.core.content.ContentCategory
+import dev.digitalducktape.openride.core.content.ContentSourceRepository
+import dev.digitalducktape.openride.core.content.ContentSourceType
 import dev.digitalducktape.openride.core.content.FeedFetcher
+import dev.digitalducktape.openride.core.content.ResolvedSource
 import dev.digitalducktape.openride.core.content.YouTubeContentRepository
 import dev.digitalducktape.openride.core.data.OpenRideDatabase
 import dev.digitalducktape.openride.core.data.Profile
@@ -41,20 +43,19 @@ class ClassesViewModelTest {
     private lateinit var profileRepository: ProfileRepository
     private lateinit var rideRepository: RideRepository
     private lateinit var activeProfileHolder: ActiveProfileHolder
-
-    private val testChannel = ChannelConfig.Channel(
-        id = "UCTestChannel00000000",
-        displayName = "Test Cycling Channel",
-        handle = "@test",
-        category = ContentCategory.Scenic,
-    )
+    private lateinit var sources: ContentSourceRepository
 
     @Before
-    fun setUp() {
+    fun setUp() = runTest {
         db = Room.inMemoryDatabaseBuilder(context, OpenRideDatabase::class.java).build()
         profileRepository = ProfileRepository(db.profileDao())
         rideRepository = RideRepository(db, db.rideDao())
         activeProfileHolder = ActiveProfileHolder(context)
+        sources = ContentSourceRepository(db.contentSourceDao())
+        sources.add(
+            ResolvedSource(ContentSourceType.CHANNEL, "UCTestChannel00000000", "Test Cycling Channel"),
+            ContentCategory.Scenic,
+        )
     }
 
     @After
@@ -68,7 +69,7 @@ class ClassesViewModelTest {
     private fun repository(fetcher: FeedFetcher = FeedFetcher { fixtureXml() }) =
         YouTubeContentRepository(
             context = context,
-            channels = listOf(testChannel),
+            sourceRepository = sources,
             fetcher = fetcher,
             cache = ContentCache(context),
         )
@@ -114,12 +115,15 @@ class ClassesViewModelTest {
 
     @Test
     fun `refresh can be called again to reload`() = runTest {
-        var callCount = 0
+        // Counts only feed fetches: the repository also probes the channel page on every
+        // call, but that page fetch is retried (and this fixture isn't valid page HTML), so
+        // its own call count doesn't cleanly reflect "one network round per refresh."
+        var feedCalls = 0
         val manager = RideSessionManager(FakeBikeDataSource(), rideRepository, backgroundScope)
         val viewModel = ClassesViewModel(
             repository(
-                FeedFetcher {
-                    callCount++
+                FeedFetcher { url ->
+                    if (url.contains("feeds/videos.xml")) feedCalls++
                     fixtureXml()
                 },
             ),
@@ -131,7 +135,7 @@ class ClassesViewModelTest {
         viewModel.refresh()
         viewModel.refresh()
 
-        assertEquals(2, callCount)
+        assertEquals(2, feedCalls)
     }
 
     @Test
