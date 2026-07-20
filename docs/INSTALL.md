@@ -118,6 +118,42 @@ To fully back out of everything above, roughly in reverse order:
 Reverting network-level OTA blocks and any OpenPelo-side launcher/app removal is outside this
 app's scope — those are OpenPelo setup steps, not something OpenRide's own APK controls.
 
+## In-app updates (T22 / #22) — optional
+
+Once OpenRide is on the tablet, you can let it update itself instead of re-running `adb install`
+every time. This is **opt-in and off by default**: no update endpoint is baked into the app, so
+with nothing configured it never contacts anything.
+
+To set it up, publish a small JSON manifest somewhere over **https** (a GitHub release asset, a
+gist, any static host) describing the current build:
+
+```json
+{
+  "versionCode": 2,
+  "versionName": "0.2.0",
+  "apkUrl": "https://example.com/openride-0.2.0.apk",
+  "notes": "Adds GPX routes"
+}
+```
+
+Then in OpenRide: **Profile tab → App updates**, paste the manifest URL, **Save URL**, and tap
+**Check for updates**. If `versionCode` is higher than the installed build's, you get a
+**Download** button, and once that finishes an **Install** button that hands the APK to Android's
+own package installer.
+
+Notes:
+
+- `versionCode` is the only thing compared — `versionName` is for humans and is never used for
+  ordering. Bump `versionCode` in `app/build.gradle.kts` for each build you publish.
+- `apkUrl` **must** be `https://`; a plaintext or `file://` URL is rejected rather than
+  downloaded, since the payload is something you're about to be asked to install.
+- Nothing installs itself. Check, Download and Install are three separate taps, and the last one
+  just opens the platform installer's own confirmation screen.
+- The first install this way will prompt you to allow OpenRide to "install unknown apps"
+  (Android's `REQUEST_INSTALL_PACKAGES` gate) — a one-time per-app system setting.
+- The published APK must be signed with the **same key** as the installed build or Android will
+  refuse the update; if you're sideloading debug builds, keep using the same debug keystore.
+
 ## Bluetooth headphones (T19 / P1-9)
 
 Class content plays through the YouTube app (OpenRide launches it via an intent) and OpenRide

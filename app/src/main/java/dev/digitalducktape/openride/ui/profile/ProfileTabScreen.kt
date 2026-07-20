@@ -49,6 +49,7 @@ fun ProfileTabScreen(
     onSwitchRider: () -> Unit,
     onRestoreComplete: () -> Unit,
     onManageHeartRateStrap: () -> Unit,
+    onManageAppUpdates: () -> Unit,
     routeHolder: RouteHolder,
     modifier: Modifier = Modifier,
 ) {
@@ -138,6 +139,13 @@ fun ProfileTabScreen(
                         "Pair heart-rate strap"
                     },
                 )
+            }
+
+            OutlinedButton(
+                onClick = onManageAppUpdates,
+                modifier = Modifier.width(280.dp).padding(top = 16.dp),
+            ) {
+                Text("App updates")
             }
 
             Text(

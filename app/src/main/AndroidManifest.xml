@@ -27,6 +27,14 @@
         android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
+    <!-- Opt-in in-app self-updater (PRD #22, T22): lets OpenRide hand a downloaded APK to the
+         system package installer, so updating the bike's tablet doesn't mean re-running ADB.
+         This only permits *asking*: the platform installer still shows its own confirmation, and
+         the user must additionally allow "install unknown apps" for OpenRide in Settings. Nothing
+         is fetched or installed unless a manifest URL has been configured and the user taps
+         through — there is no baked-in update endpoint. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
     <application
         android:allowBackup="true"
         android:icon="@android:drawable/sym_def_app_icon"

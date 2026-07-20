@@ -16,6 +16,9 @@ object Destinations {
     /** BLE heart-rate strap pairing screen (PRD P1-4, T17), reachable from the Profile tab. */
     const val HrPairing = "hr_pairing"
 
+    /** Opt-in self-updater screen (PRD #22/T22), reachable from the Profile tab. */
+    const val AppUpdate = "app_update"
+
     private const val RideSummaryBase = "ride_summary"
     const val RideIdArg = "rideId"
     const val RideSummary = "$RideSummaryBase/{$RideIdArg}"
