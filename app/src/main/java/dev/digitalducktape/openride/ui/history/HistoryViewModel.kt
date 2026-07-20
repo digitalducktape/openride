@@ -29,6 +29,12 @@ class HistoryViewModel(
 
     val rows: Flow<List<RideHistoryRow>> = ridesFlow.map { rides -> rides.map(RideHistoryMapper::map) }
 
+    /** Lifetime aggregates + personal records for the overview band (v2 metrics spec). */
+    val stats: Flow<HistoryStats> = ridesFlow.map(HistoryStats::from)
+
+    /** Local dates with at least one ride — the calendar's marked days. */
+    val rideDates: Flow<Set<java.time.LocalDate>> = ridesFlow.map { HistoryStats.rideDates(it) }
+
     /**
      * CSV export of the active profile's full ride history (PRD P1-2), as it stands at the
      * moment of the call — a one-shot snapshot via [Flow.first], not a live subscription,

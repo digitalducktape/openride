@@ -1,12 +1,16 @@
 package dev.digitalducktape.openride.ui.ride
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -17,7 +21,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -25,13 +32,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.digitalducktape.openride.ui.common.ExportShare
 import dev.digitalducktape.openride.ui.common.TimeFormat
+import dev.digitalducktape.openride.ui.theme.MetricTextStyles
+import dev.digitalducktape.openride.ui.theme.OpenRideColors
 import kotlinx.coroutines.launch
 
 /**
- * Post-ride summary (PRD P0-5): duration, avg/max cadence, avg/max output, total kJ,
- * calories, and a Canvas line graph of power over the ride. Reused unmodified as history's
- * detail view (T8) — [viewModel] loads by ride id from Room either way, so this screen never
- * needs to know whether it's showing a ride just stopped or one from history.
+ * Post-ride summary and history detail (PRD P0-5, v2 metrics spec): a metric tab row
+ * (Output / Cadence / Resistance / Heart-Rate-when-recorded) selecting which per-second
+ * series the graph draws and which headline stats sit above it — after the original bike
+ * UI's per-ride view. Reused unmodified as history's detail view (T8) — [viewModel] loads
+ * by ride id from Room either way, so this screen never needs to know whether it's showing
+ * a ride just stopped or one from history.
  */
 @Composable
 fun RideSummaryScreen(
@@ -45,6 +56,7 @@ fun RideSummaryScreen(
     val ftpApplied by viewModel.ftpApplied.collectAsState()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    var selectedMetric by remember { mutableStateOf(RideMetric.Output) }
 
     LaunchedEffect(Unit) { viewModel.load() }
 
@@ -53,16 +65,9 @@ fun RideSummaryScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(48.dp),
+                .padding(horizontal = 48.dp, vertical = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text(
-                text = "Ride complete",
-                style = MaterialTheme.typography.headlineLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
-
             val current = ride
             if (current == null) {
                 Text(
@@ -72,22 +77,48 @@ fun RideSummaryScreen(
                     modifier = Modifier.padding(top = 32.dp),
                 )
             } else {
-                Column(modifier = Modifier.fillMaxWidth().padding(top = 32.dp)) {
-                    SummaryRow("Duration", TimeFormat.elapsed(current.durationSec))
-                    SummaryRow("Avg cadence", "${current.avgCadence} rpm")
-                    SummaryRow("Max cadence", "${current.maxCadence} rpm")
-                    SummaryRow("Avg output", "${current.avgPower} W")
-                    SummaryRow("Max output", "${current.maxPower} W")
-                    SummaryRow("Total output", "%.1f kJ".format(current.outputKj))
-                    SummaryRow("Calories", current.calories?.toString() ?: "--")
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column {
+                        Text(
+                            text = "Ride complete",
+                            style = MaterialTheme.typography.headlineLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground,
+                        )
+                        Text(
+                            text = "${TimeFormat.elapsed(current.durationSec)} · " +
+                                (current.calories?.let { "$it kcal" } ?: "%.0f kJ".format(current.outputKj)),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                    }
+                }
 
-                    Text(
-                        text = "Power over time",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 24.dp, bottom = 8.dp),
+                Column(modifier = Modifier.fillMaxWidth().padding(top = 24.dp)) {
+                    MetricTabRow(
+                        metrics = RideMetric.available(samples),
+                        selected = selectedMetric,
+                        onSelect = { selectedMetric = it },
                     )
-                    PowerGraph(samples = samples, modifier = Modifier.fillMaxWidth())
+
+                    StatBand(
+                        stats = RideMetricStats.stats(selectedMetric, current, samples),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 24.dp),
+                    )
+
+                    MetricGraph(
+                        points = RideMetricStats.points(selectedMetric, samples),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 20.dp),
+                    )
 
                     ExportRow(
                         onExportTcx = {
@@ -188,12 +219,65 @@ private fun FtpSuggestionCard(
     }
 }
 
+/** Pill tab row selecting the graphed metric, after the original bike UI's tab strip. */
 @Composable
-private fun SummaryRow(label: String, value: String) {
-    Text(
-        text = "$label: $value",
-        style = MaterialTheme.typography.titleMedium,
-        color = MaterialTheme.colorScheme.onBackground,
-        modifier = Modifier.padding(vertical = 4.dp),
-    )
+private fun MetricTabRow(
+    metrics: List<RideMetric>,
+    selected: RideMetric,
+    onSelect: (RideMetric) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        metrics.forEach { metric ->
+            val isSelected = metric == selected
+            Box(
+                modifier = Modifier
+                    .background(
+                        color = if (isSelected) OpenRideColors.Accent else MaterialTheme.colorScheme.surface,
+                        shape = RoundedCornerShape(20.dp),
+                    )
+                    .clickable { onSelect(metric) }
+                    .padding(horizontal = 18.dp, vertical = 8.dp),
+            ) {
+                Text(
+                    text = metric.label,
+                    style = MetricTextStyles.TileLabel,
+                    color = if (isSelected) {
+                        MaterialTheme.colorScheme.onBackground
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+            }
+        }
+    }
+}
+
+/** TOTAL / AVG / MAX headline stats for the selected metric. */
+@Composable
+private fun StatBand(stats: List<MetricStat>, modifier: Modifier = Modifier) {
+    Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(48.dp)) {
+        stats.forEach { stat ->
+            Column {
+                Text(
+                    text = stat.label,
+                    style = MetricTextStyles.TileLabel,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        text = stat.value,
+                        style = MetricTextStyles.TileValueLarge,
+                        color = MaterialTheme.colorScheme.onBackground,
+                    )
+                    Text(
+                        text = stat.unit,
+                        style = MetricTextStyles.UnitLabel,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 6.dp, bottom = 10.dp),
+                    )
+                }
+            }
+        }
+    }
 }
