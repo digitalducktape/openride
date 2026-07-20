@@ -19,13 +19,19 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.digitalducktape.openride.ui.common.ExportShare
+import dev.digitalducktape.openride.ui.common.TimeFormat
+import dev.digitalducktape.openride.ui.theme.MetricTextStyles
+import java.time.YearMonth
 import kotlinx.coroutines.launch
 
 /**
@@ -41,11 +47,14 @@ fun HistoryScreen(
     modifier: Modifier = Modifier,
 ) {
     val rows by viewModel.rows.collectAsState(initial = emptyList())
+    val stats by viewModel.stats.collectAsState(initial = HistoryStats.from(emptyList()))
+    val rideDates by viewModel.rideDates.collectAsState(initial = emptySet())
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    var month by remember { mutableStateOf(YearMonth.now()) }
 
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Column(modifier = Modifier.fillMaxSize().padding(48.dp)) {
+        Column(modifier = Modifier.fillMaxSize().padding(horizontal = 48.dp, vertical = 32.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -78,11 +87,86 @@ fun HistoryScreen(
                     )
                 }
             } else {
-                LazyColumn(modifier = Modifier.padding(top = 24.dp)) {
-                    items(rows, key = { it.rideId }) { row ->
-                        RideHistoryListItem(row = row, onClick = { onRideSelected(row.rideId) })
+                StatsBand(stats = stats, modifier = Modifier.fillMaxWidth().padding(top = 20.dp))
+
+                // Below the band: ride list on the left, calendar + records on the right —
+                // the landscape split of the profile-overview references.
+                Row(modifier = Modifier.fillMaxSize().padding(top = 20.dp)) {
+                    LazyColumn(modifier = Modifier.weight(1f)) {
+                        items(rows, key = { it.rideId }) { row ->
+                            RideHistoryListItem(row = row, onClick = { onRideSelected(row.rideId) })
+                        }
+                    }
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(start = 40.dp),
+                    ) {
+                        RideCalendar(
+                            month = month,
+                            rideDates = rideDates,
+                            onMonthChange = { month = it },
+                        )
+                        RecordsBand(stats = stats, modifier = Modifier.fillMaxWidth().padding(top = 24.dp))
                     }
                 }
+            }
+        }
+    }
+}
+
+/** Lifetime totals band: rides / time / total output, big-number-small-eyebrow style. */
+@Composable
+private fun StatsBand(stats: HistoryStats, modifier: Modifier = Modifier) {
+    Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(56.dp)) {
+        StatBlock(label = "TOTAL RIDES", value = "${stats.totalRides}", unit = null)
+        StatBlock(label = "TOTAL TIME", value = TimeFormat.elapsed(stats.totalDurationSec.toInt()), unit = null)
+        StatBlock(label = "TOTAL OUTPUT", value = "%.0f".format(stats.totalOutputKj), unit = "KJ")
+    }
+}
+
+/** Personal records: best ride output, best avg power, longest ride. */
+@Composable
+private fun RecordsBand(stats: HistoryStats, modifier: Modifier = Modifier) {
+    Column(modifier = modifier) {
+        Text(
+            text = "PERSONAL RECORDS",
+            style = MetricTextStyles.SectionEyebrow,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(40.dp),
+        ) {
+            StatBlock(label = "BEST RIDE", value = "%.0f".format(stats.bestOutputKj ?: 0.0), unit = "KJ")
+            StatBlock(label = "BEST AVG", value = "${stats.bestAvgPower ?: 0}", unit = "WATTS")
+            StatBlock(label = "LONGEST", value = TimeFormat.elapsed(stats.longestRideSec ?: 0), unit = null)
+        }
+    }
+}
+
+@Composable
+private fun StatBlock(label: String, value: String, unit: String?, modifier: Modifier = Modifier) {
+    Column(modifier = modifier) {
+        Text(
+            text = label,
+            style = MetricTextStyles.TileLabel,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(
+                text = value,
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+            if (unit != null) {
+                Text(
+                    text = unit,
+                    style = MetricTextStyles.UnitLabel,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 5.dp, bottom = 5.dp),
+                )
             }
         }
     }
