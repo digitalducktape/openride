@@ -6,12 +6,14 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.digitalducktape.openride.core.data.OpenRideDatabase
 import java.io.IOException
 import java.io.InputStream
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -95,11 +97,16 @@ class YouTubeContentRepositoryTest {
 
     @Test
     fun `videos absent from the page listing are dropped as non-public`() = runTest {
-        // The Atom fixture's ids are not present in the page fixture, so a successful page
-        // fetch means none of them survive — that's the members-only rule.
+        // The Atom fixture's entries (testVideoOne1, testVideoTwo2, noThumbVideo3 — see
+        // sample_atom_feed.xml) are not present in the page fixture, so a successful page
+        // fetch means none of them survive — that's the members-only rule. This asserts the
+        // concrete feed-only ids by name so the test would actually fail if the merge ever
+        // unioned the page and feed lists instead of using the page as authoritative.
         val section = repository(fetcher()).channelSections().single()
 
-        assertTrue(section.videos.none { it.id.startsWith("video") })
+        val feedOnlyIds = listOf("testVideoOne1", "testVideoTwo2", "noThumbVideo3")
+        assertEquals(listOf("vidLong00001", "vidNoDur0003"), section.videos.map { it.id })
+        assertTrue(section.videos.none { it.id in feedOnlyIds })
     }
 
     @Test
@@ -195,6 +202,31 @@ class YouTubeContentRepositoryTest {
 
         assertEquals(listOf("vidLong00001", "vidNoDur0003"), videos.map { it.id })
         assertEquals("Themed Rides", videos.first().channelName)
+    }
+
+    @Test
+    fun `playlistVideos falls back to its own cache after a successful fetch`() = runTest {
+        // Prime the cache: a successful fetch of a playlist reached only from a creator's
+        // page (never its own content_sources row) must still populate a cache entry keyed
+        // by that playlist id, otherwise a later failure has nothing to fall back to.
+        repository(fetcher()).playlistVideos("PLtheme000000001", "Themed Rides")
+
+        val videos = repository(fetcher(page = null, feed = null))
+            .playlistVideos("PLtheme000000001", "Themed Rides")
+
+        assertEquals(listOf("vidLong00001", "vidNoDur0003"), videos.map { it.id })
+    }
+
+    @Test
+    fun `a cancelled coroutine propagates instead of falling back to the cache`() = runTest {
+        val cancelling = FeedFetcher { throw CancellationException("coroutine cancelled") }
+
+        try {
+            repository(cancelling).channelSections()
+            fail("expected CancellationException to propagate, not be swallowed into a cache fallback")
+        } catch (expected: CancellationException) {
+            // expected: cancellation must not be converted into "fetch failed"
+        }
     }
 
     @Test

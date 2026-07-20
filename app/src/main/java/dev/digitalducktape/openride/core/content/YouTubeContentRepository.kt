@@ -1,6 +1,7 @@
 package dev.digitalducktape.openride.core.content
 
 import android.content.Context
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -53,11 +54,22 @@ class YouTubeContentRepository(
         )
     }
 
-    /** One playlist's rideable videos, filtered like any other row. */
+    /**
+     * One playlist's rideable videos, filtered like any other row. Writes the filtered result
+     * back under [playlistId] on success so a later failure — even for a playlist only ever
+     * reached from a creator's page, never its own `content_sources` row — has a cache entry
+     * to fall back to instead of an empty list.
+     */
     suspend fun playlistVideos(playlistId: String, displayName: String): List<Video> =
         withContext(Dispatchers.IO) {
-            fetchVideos(ContentSourceType.PLAYLIST, playlistId, displayName)?.let(::rideable)
-                ?: cache.read(playlistId).orEmpty()
+            val videos = fetchVideos(ContentSourceType.PLAYLIST, playlistId, displayName)
+            if (videos == null) {
+                cache.read(playlistId).orEmpty()
+            } else {
+                val filtered = rideable(videos)
+                cache.write(playlistId, filtered)
+                filtered
+            }
         }
 
     private fun fetchSection(source: ContentSource): ChannelSection {
@@ -128,9 +140,17 @@ class YouTubeContentRepository(
     /**
      * Runs a fetch with one retry, converting *any* failure — network error, malformed XML,
      * unreadable page JSON — into `null`. One bad response must never crash the Classes tab.
+     *
+     * [CancellationException] must be rethrown, not converted to `null`: it means the calling
+     * coroutine was cancelled, not that the fetch failed, and swallowing it here would turn a
+     * cancellation into a silent "fetch failed, use the cache" — defeating the same rethrow
+     * that [retryingOnce] already does, and breaking structured concurrency. Do not fold this
+     * back into the generic catch below.
      */
     private fun <T> tryFetch(block: () -> T): T? = try {
         retryingOnce(block)
+    } catch (cancellation: CancellationException) {
+        throw cancellation
     } catch (e: Exception) {
         null
     }
