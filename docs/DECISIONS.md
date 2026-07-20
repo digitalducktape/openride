@@ -3,7 +3,24 @@
 Short-form log of decisions that aren't obvious from the code alone. Add to this as Phase 1/2
 work raises other judgment calls worth recording.
 
-## Classes playback: YouTube app intent vs. in-app WebView IFrame player (T10)
+## Classes playback v2: in-app embedded player with metrics overlay (supersedes T10 below)
+
+**Decision (2026-07-19):** classes now play *inside* OpenRide — `VideoRideScreen` hosts a
+WebView streaming the class through YouTube's own embedded player
+(`youtube-nocookie.com/embed/<id>`, built by `ui/classes/YouTubeEmbed`), with live ride
+metrics overlaid (shared `RideMetricsBar` + timer/controls scrim). Tapping a class starts a
+ride session and navigates to `video_ride/{videoId}`; ending it lands on the normal summary.
+This is exactly the "revisit as P2" path the original T10 entry reserved, pulled forward
+because the context-switch to the YouTube app was the roughest seam in v1.
+
+**ToS stance (PRD Non-Goal #5, unchanged):** the embed is YouTube's official player on the
+privacy-enhanced domain; nothing is downloaded, cached, or rehosted; YouTube's native player
+controls stay enabled (`controls=1`) and the metrics overlay is dismissible (tap the video)
+so the player UI is never permanently obscured; no ad-stripping or background-playback
+tricks. Ride pause and video pause are deliberately independent in v2 — syncing them needs
+a JS bridge to the IFrame Player API and is recorded in the v2 spec as a follow-up.
+
+## Classes playback: YouTube app intent vs. in-app WebView IFrame player (T10 — superseded)
 
 **Decision:** v1 launches the video via an `ACTION_VIEW` intent to `https://www.youtube.com/watch?v=<id>`
 (package-hinted at the YouTube app, falling back to a browser if it isn't installed — see

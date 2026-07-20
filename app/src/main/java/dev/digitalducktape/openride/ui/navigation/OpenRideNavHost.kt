@@ -21,6 +21,7 @@ import dev.digitalducktape.openride.ui.profile.HrPairingScreen
 import dev.digitalducktape.openride.ui.profile.HrPairingViewModel
 import dev.digitalducktape.openride.ui.ride.InRideScreen
 import dev.digitalducktape.openride.ui.ride.InRideViewModel
+import dev.digitalducktape.openride.ui.ride.VideoRideScreen
 import dev.digitalducktape.openride.ui.ride.RideSummaryScreen
 import dev.digitalducktape.openride.ui.ride.RideSummaryViewModel
 
@@ -121,6 +122,35 @@ fun OpenRideNavHost(appContainer: AppContainer) {
             )
             InRideScreen(
                 viewModel = viewModel,
+                onRideEnded = { rideId ->
+                    navController.navigate(Destinations.rideSummary(rideId)) {
+                        popUpTo(Destinations.Main) { inclusive = false }
+                        launchSingleTop = true
+                    }
+                },
+            )
+        }
+
+        composable(
+            route = Destinations.VideoRide,
+            arguments = listOf(navArgument(Destinations.VideoIdArg) { type = NavType.StringType }),
+        ) { backStackEntry ->
+            val videoId = backStackEntry.arguments?.getString(Destinations.VideoIdArg).orEmpty()
+            val viewModel: InRideViewModel = viewModel(
+                factory = viewModelFactory {
+                    InRideViewModel(
+                        appContainer.rideSessionManager,
+                        appContainer.bikeDataSource,
+                        appContainer.profileRepository,
+                        appContainer.activeProfileHolder,
+                        appContainer.heartRateManager,
+                        appContainer.routeHolder,
+                    )
+                },
+            )
+            VideoRideScreen(
+                viewModel = viewModel,
+                videoId = videoId,
                 onRideEnded = { rideId ->
                     navController.navigate(Destinations.rideSummary(rideId)) {
                         popUpTo(Destinations.Main) { inclusive = false }
