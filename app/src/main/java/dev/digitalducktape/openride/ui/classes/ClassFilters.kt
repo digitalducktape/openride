@@ -41,11 +41,16 @@ enum class LengthFilter(val label: String, val minSec: Int, val maxSec: Int?) {
  * @property isDefaultBrowse true while the tab should show its per-creator rows. Category
  *   narrows which rows appear, so it doesn't leave browse mode; a sort or length choice is a
  *   question about the whole catalog and switches to the flat grid.
+ * @property hideTaken when true, classes the active profile has already finished are hidden.
+ *   It's a filter *within* whichever layout is showing — it deliberately does not feed
+ *   [isDefaultBrowse], so hiding completed classes narrows the browse rows in place rather than
+ *   forcing the flat grid.
  */
 data class ClassFilters(
     val category: CategoryFilter = CategoryFilter.All,
     val sort: ClassSort = ClassSort.Newest,
     val length: LengthFilter = LengthFilter.Any,
+    val hideTaken: Boolean = false,
 ) {
     val isDefaultBrowse: Boolean
         get() = sort == ClassSort.Newest && length == LengthFilter.Any
@@ -60,12 +65,29 @@ object ClassFiltering {
         return duration >= length.minSec && (length.maxSec == null || duration < length.maxSec)
     }
 
-    /** The creator rows to show for [category], in configured order. */
-    fun rows(sections: List<ChannelSection>, category: CategoryFilter): List<ChannelSection> =
+    private fun forCategory(sections: List<ChannelSection>, category: CategoryFilter): List<ChannelSection> =
         when (category) {
             CategoryFilter.All -> sections
             CategoryFilter.Workout -> sections.filter { it.category == ContentCategory.Workout }
             CategoryFilter.Scenic -> sections.filter { it.category == ContentCategory.Scenic }
+        }
+
+    /**
+     * The creator rows to show, in configured order: narrowed to [ClassFilters.category] and, when
+     * [ClassFilters.hideTaken] is on, with the profile's already-finished classes ([taken] video
+     * ids) removed from each row.
+     */
+    fun rows(
+        sections: List<ChannelSection>,
+        filters: ClassFilters,
+        taken: Set<String>,
+    ): List<ChannelSection> =
+        forCategory(sections, filters.category).map { section ->
+            if (filters.hideTaken) {
+                section.copy(videos = section.videos.filterNot { it.id in taken })
+            } else {
+                section
+            }
         }
 
     /** Every matching video across creators, ordered by [ClassFilters.sort]. */
@@ -73,10 +95,12 @@ object ClassFiltering {
         sections: List<ChannelSection>,
         filters: ClassFilters,
         random: Random,
+        taken: Set<String>,
     ): List<Video> {
-        val matching = rows(sections, filters.category)
+        val matching = forCategory(sections, filters.category)
             .flatMap { it.videos }
             .filter { matchesLength(it, filters.length) }
+            .filter { !filters.hideTaken || it.id !in taken }
         return when (filters.sort) {
             ClassSort.Newest -> matching.sortedByDescending { it.publishedEpochMs }
             ClassSort.Oldest -> matching.sortedBy { it.publishedEpochMs }

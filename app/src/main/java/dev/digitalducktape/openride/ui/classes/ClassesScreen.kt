@@ -42,8 +42,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import android.widget.Toast
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.digitalducktape.openride.core.content.ChannelSection
@@ -77,7 +79,14 @@ fun ClassesScreen(
     LaunchedEffect(Unit) { viewModel.refresh() }
 
     val startRide: (Video) -> Unit = { video ->
-        if (viewModel.startRideForVideo(video.id)) onStartVideoRide(video.id)
+        if (viewModel.startRideForVideo(video)) onStartVideoRide(video.id)
+    }
+
+    val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        viewModel.messages.collect { message ->
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        }
     }
 
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -92,6 +101,7 @@ fun ClassesScreen(
                 onCategorySelected = viewModel::setCategory,
                 onSortSelected = viewModel::setSort,
                 onLengthSelected = viewModel::setLength,
+                onHideTakenToggled = viewModel::setHideTaken,
                 onVideoSelected = startRide,
                 onOpenCreator = onOpenCreator,
                 onRandomRide = { viewModel.randomVideo()?.let(startRide) },
@@ -118,6 +128,7 @@ private fun LoadedContent(
     onCategorySelected: (CategoryFilter) -> Unit,
     onSortSelected: (ClassSort) -> Unit,
     onLengthSelected: (LengthFilter) -> Unit,
+    onHideTakenToggled: (Boolean) -> Unit,
     onVideoSelected: (Video) -> Unit,
     onOpenCreator: (Long) -> Unit,
     onRandomRide: () -> Unit,
@@ -151,6 +162,7 @@ private fun LoadedContent(
             onCategorySelected = onCategorySelected,
             onSortSelected = onSortSelected,
             onLengthSelected = onLengthSelected,
+            onHideTakenToggled = onHideTakenToggled,
             modifier = Modifier.padding(top = 16.dp),
         )
 
@@ -242,6 +254,7 @@ private fun FilterBar(
     onCategorySelected: (CategoryFilter) -> Unit,
     onSortSelected: (ClassSort) -> Unit,
     onLengthSelected: (LengthFilter) -> Unit,
+    onHideTakenToggled: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -268,6 +281,12 @@ private fun FilterBar(
             label = filters.length.label,
             options = LengthFilter.entries.map { it to it.label },
             onSelected = onLengthSelected,
+        )
+
+        FilterChip(
+            selected = filters.hideTaken,
+            onClick = { onHideTakenToggled(!filters.hideTaken) },
+            label = { Text("Hide completed") },
         )
     }
 }

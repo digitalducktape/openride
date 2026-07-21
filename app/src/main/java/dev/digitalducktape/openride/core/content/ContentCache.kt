@@ -28,6 +28,7 @@ class ContentCache(context: Context) {
                     put(KEY_CHANNEL_NAME, video.channelName)
                     put(KEY_DURATION_SEC, video.durationSec ?: JSONObject.NULL)
                     put(KEY_PUBLISHED_EPOCH_MS, video.publishedEpochMs)
+                    put(KEY_STARTABLE, video.startable)
                 },
             )
         }
@@ -49,6 +50,9 @@ class ContentCache(context: Context) {
                     channelName = obj.getString(KEY_CHANNEL_NAME),
                     durationSec = if (obj.isNull(KEY_DURATION_SEC)) null else obj.getInt(KEY_DURATION_SEC),
                     publishedEpochMs = obj.getLong(KEY_PUBLISHED_EPOCH_MS),
+                    // Cache files written before this field existed have no key; those entries
+                    // predate the feed-fallback change and were page-verified, so default true.
+                    startable = obj.optBoolean(KEY_STARTABLE, true),
                 )
             }
         } catch (e: Exception) {
@@ -68,5 +72,6 @@ class ContentCache(context: Context) {
         const val KEY_CHANNEL_NAME = "channelName"
         const val KEY_DURATION_SEC = "durationSec"
         const val KEY_PUBLISHED_EPOCH_MS = "publishedEpochMs"
+        const val KEY_STARTABLE = "startable"
     }
 }
