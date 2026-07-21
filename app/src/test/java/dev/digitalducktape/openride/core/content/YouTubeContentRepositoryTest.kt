@@ -119,6 +119,24 @@ class YouTubeContentRepositoryTest {
     }
 
     @Test
+    fun `feed-fallback videos are marked non-startable`() = runTest {
+        // With no page to confirm them, feed-only videos can't be verified as public (the feed
+        // carries no members-only marker), so they must not be startable.
+        val section = repository(fetcher(page = null)).channelSections().single()
+
+        assertTrue(section.videos.isNotEmpty())
+        assertTrue(section.videos.none { it.startable })
+    }
+
+    @Test
+    fun `page-verified videos are startable`() = runTest {
+        val section = repository(fetcher()).channelSections().single()
+
+        assertTrue(section.videos.isNotEmpty())
+        assertTrue(section.videos.all { it.startable })
+    }
+
+    @Test
     fun `both fetches failing with no cache yields an empty section flagged as failed`() = runTest {
         val section = repository(fetcher(page = null, feed = null)).channelSections().single()
 
@@ -296,5 +314,50 @@ class YouTubeContentRepositoryTest {
         assertTrue(requestedPlaylistPage)
         assertEquals(2, sections.size)
         assertEquals(playlistId, sections.last().sourceId)
+    }
+
+    @Test
+    fun `videos whose title is not a cycling class are dropped`() = runTest {
+        // A configured channel is a whole creator, not a spin-only feed: both tiles are long
+        // enough to ride, but only the one whose title reads as cycling belongs in the catalog.
+        // The sculpt class must not appear.
+        val mixedPage = """
+            <script>var ytInitialData = {"contents":{"tabs":[{"tabRenderer":{"content":{
+              "richGridRenderer":{"contents":[
+                {"richItemRenderer":{"content":{"lockupViewModel":{
+                  "contentId":"rideVid00001","contentType":"LOCKUP_CONTENT_TYPE_VIDEO",
+                  "contentImage":{"thumbnailViewModel":{"overlays":[{"thumbnailBottomOverlayViewModel":{
+                    "badges":[{"thumbnailBadgeViewModel":{"text":"45:00"}}]}}]}},
+                  "metadata":{"lockupMetadataViewModel":{
+                    "title":{"content":"45 Minute Endurance Ride"}}}}}}},
+                {"richItemRenderer":{"content":{"lockupViewModel":{
+                  "contentId":"sculptVid001","contentType":"LOCKUP_CONTENT_TYPE_VIDEO",
+                  "contentImage":{"thumbnailViewModel":{"overlays":[{"thumbnailBottomOverlayViewModel":{
+                    "badges":[{"thumbnailBadgeViewModel":{"text":"45:00"}}]}}]}},
+                  "metadata":{"lockupMetadataViewModel":{
+                    "title":{"content":"45 MIN SCULPT CLASS | Full Body"}}}}}}}
+              ]}}}}]}};</script>
+        """.trimIndent()
+
+        val section = repository(fetcher(page = { mixedPage }, feed = null)).channelSections().single()
+
+        assertEquals(listOf("rideVid00001"), section.videos.map { it.id })
+    }
+
+    @Test
+    fun `playlists whose title is not a cycling class are dropped`() = runTest {
+        val mixedPlaylists = """
+            <script>var ytInitialData = {"contents":{"items":[
+              {"lockupViewModel":{"contentId":"PLspin000000001","contentType":"LOCKUP_CONTENT_TYPE_PLAYLIST",
+                "metadata":{"lockupMetadataViewModel":{"title":{"content":"Spin Classes: Theme Rides"}}}}},
+              {"lockupViewModel":{"contentId":"PLsculpt00001","contentType":"LOCKUP_CONTENT_TYPE_PLAYLIST",
+                "metadata":{"lockupMetadataViewModel":{"title":{"content":"Full Body Sculpt Classes"}}}}}
+            ]}};</script>
+        """.trimIndent()
+        val source = sources.visibleOnce().single()
+
+        val content = repository(fetcher(playlists = { mixedPlaylists })).creatorContent(source.id)!!
+
+        assertEquals(listOf("PLspin000000001"), content.playlists.map { it.id })
     }
 }

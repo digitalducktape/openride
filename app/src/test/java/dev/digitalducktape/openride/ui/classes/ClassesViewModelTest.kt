@@ -11,6 +11,7 @@ import dev.digitalducktape.openride.core.content.ContentSourceRepository
 import dev.digitalducktape.openride.core.content.ContentSourceType
 import dev.digitalducktape.openride.core.content.FeedFetcher
 import dev.digitalducktape.openride.core.content.ResolvedSource
+import dev.digitalducktape.openride.core.content.Video
 import dev.digitalducktape.openride.core.content.YouTubeContentRepository
 import dev.digitalducktape.openride.core.data.OpenRideDatabase
 import dev.digitalducktape.openride.core.data.Profile
@@ -26,8 +27,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -77,7 +80,19 @@ class ClassesViewModelTest {
     private fun fixtureXml() =
         requireNotNull(javaClass.classLoader?.getResourceAsStream("fixtures/sample_atom_feed.xml"))
 
-    private fun repository(fetcher: FeedFetcher = FeedFetcher { fixtureXml() }) =
+    private fun pageHtml() =
+        requireNotNull(javaClass.classLoader?.getResourceAsStream("fixtures/channel_videos_page.html"))
+            .bufferedReader().use { it.readText() }
+
+    /**
+     * The normal case: a real page (so videos are page-verified and startable) plus the feed for
+     * timestamps. Tests that need the degraded page-down path pass a feed-only fetcher explicitly.
+     */
+    private fun pageBackedFetcher() = FeedFetcher { url ->
+        if (url.contains("feeds/videos.xml")) fixtureXml() else pageHtml().byteInputStream()
+    }
+
+    private fun repository(fetcher: FeedFetcher = pageBackedFetcher()) =
         YouTubeContentRepository(
             context = context,
             sourceRepository = sources,
@@ -87,7 +102,7 @@ class ClassesViewModelTest {
 
     private fun viewModel(
         scope: CoroutineScope,
-        fetcher: FeedFetcher = FeedFetcher { fixtureXml() },
+        fetcher: FeedFetcher = pageBackedFetcher(),
     ): Pair<ClassesViewModel, RideSessionManager> {
         val manager = RideSessionManager(FakeBikeDataSource(), rideRepository, scope)
         val viewModel = ClassesViewModel(repository(fetcher), manager, activeProfileHolder, rideRepository)
@@ -110,7 +125,9 @@ class ClassesViewModelTest {
         val loaded = viewModel.uiState.value as ClassesUiState.Loaded
         assertFalse(loaded.anyRefreshFailed)
         assertEquals(1, loaded.sections.size)
-        assertEquals(3, loaded.sections.single().videos.size)
+        // The page fixture has three video tiles; the 5:04 one is dropped as too short, leaving two.
+        assertEquals(2, loaded.sections.single().videos.size)
+        assertTrue(loaded.sections.single().videos.all { it.startable })
     }
 
     @Test
@@ -209,11 +226,21 @@ class ClassesViewModelTest {
         assertEquals(2, feedCalls)
     }
 
+    private fun video(id: String, startable: Boolean = true) = Video(
+        id = id,
+        title = "$id Ride",
+        thumbnailUrl = "https://example.com/$id.jpg",
+        channelName = "Chan",
+        durationSec = 1800,
+        publishedEpochMs = 1000L,
+        startable = startable,
+    )
+
     @Test
     fun `startRideForVideo returns false and starts nothing when no profile is active`() = runTest {
         val (viewModel, manager) = viewModel(backgroundScope)
 
-        val started = viewModel.startRideForVideo("videoAbc123")
+        val started = viewModel.startRideForVideo(video("videoAbc123"))
 
         assertFalse(started)
         assertEquals(RideSessionState.Idle, manager.state.value)
@@ -227,10 +254,29 @@ class ClassesViewModelTest {
         activeProfileHolder.setActiveProfile(profileId)
         val (viewModel, manager) = viewModel(backgroundScope)
 
-        val started = viewModel.startRideForVideo("videoAbc123")
+        val started = viewModel.startRideForVideo(video("videoAbc123"))
 
         assertTrue(started)
         assertEquals(RideSessionState.Active, manager.state.value)
+    }
+
+    @Test
+    fun `startRideForVideo refuses a non-startable video and notifies the rider`() = runTest {
+        val profileId = profileRepository.createProfile(
+            Profile(name = "Ed", avatarEmoji = "🚴", avatarColor = 0xFF00AAFF.toInt(), weightKg = null, ftp = null),
+        )
+        activeProfileHolder.setActiveProfile(profileId)
+        val (viewModel, manager) = viewModel(backgroundScope)
+        val messages = mutableListOf<String>()
+        backgroundScope.launch { viewModel.messages.collect { messages.add(it) } }
+        runCurrent() // let the collector subscribe before the emit
+
+        val started = viewModel.startRideForVideo(video("feedOnly", startable = false))
+        runCurrent() // deliver the emitted message to the collector
+
+        assertFalse(started)
+        assertEquals(RideSessionState.Idle, manager.state.value)
+        assertEquals(1, messages.size)
     }
 
     @Test
@@ -336,5 +382,53 @@ class ClassesViewModelTest {
         viewModel.setCategory(CategoryFilter.Workout)
 
         assertNull(viewModel.randomVideo())
+    }
+
+    @Test
+    fun `randomVideo never returns a non-startable feed-fallback video`() = runTest {
+        // Feed-only fetcher: the page is unavailable, so every loaded video is feed-fallback and
+        // non-startable. Random Ride must find nothing rather than pick a class that won't start.
+        val (viewModel, _) = viewModel(backgroundScope, FeedFetcher { fixtureXml() })
+        viewModel.refresh()
+
+        assertTrue(viewModel.rows.value.single().videos.isNotEmpty())
+        assertNull(viewModel.randomVideo())
+    }
+
+    @Test
+    fun `hideTaken drops finished classes from the browse rows`() = runTest {
+        val profileId = profileRepository.createProfile(
+            Profile(name = "Ed", avatarEmoji = "🚴", avatarColor = 0xFF00AAFF.toInt(), weightKg = null, ftp = null),
+        )
+        activeProfileHolder.setActiveProfile(profileId)
+        val (viewModel, _) = viewModel(backgroundScope)
+        viewModel.refresh()
+        val before = viewModel.rows.value.single().videos.map { it.id }
+        assertTrue(before.contains("vidLong00001"))
+
+        rideRepository.saveRide(
+            Ride(
+                profileId = profileId,
+                startEpochMs = 1_000L,
+                durationSec = 1200,
+                avgCadence = 70,
+                maxCadence = 80,
+                avgPower = 100,
+                maxPower = 120,
+                avgResistance = 30,
+                outputKj = 6.0,
+                calories = 6,
+                videoId = "vidLong00001",
+            ),
+            emptyList(),
+        )
+        // Wait for the Room-backed taken flow to reflect the saved ride before toggling, so the
+        // rows recompute sees the completed class (the flow rows read from is the same instance).
+        viewModel.takenVideos.first { it.containsKey("vidLong00001") }
+        viewModel.setHideTaken(true)
+
+        val after = viewModel.rows.value.single().videos.map { it.id }
+        assertFalse(after.contains("vidLong00001"))
+        assertEquals(before.size - 1, after.size)
     }
 }
