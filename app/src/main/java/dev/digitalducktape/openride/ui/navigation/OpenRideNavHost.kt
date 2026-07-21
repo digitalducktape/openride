@@ -10,6 +10,10 @@ import androidx.navigation.navArgument
 import dev.digitalducktape.openride.AppContainer
 import dev.digitalducktape.openride.BuildConfig
 import dev.digitalducktape.openride.viewModelFactory
+import dev.digitalducktape.openride.ui.creator.CreatorScreen
+import dev.digitalducktape.openride.ui.creator.CreatorViewModel
+import dev.digitalducktape.openride.ui.sources.ContentSourcesScreen
+import dev.digitalducktape.openride.ui.sources.ContentSourcesViewModel
 import dev.digitalducktape.openride.ui.update.UpdateScreen
 import dev.digitalducktape.openride.ui.update.UpdateViewModel
 import dev.digitalducktape.openride.ui.main.MainScaffold
@@ -128,6 +132,21 @@ fun OpenRideNavHost(appContainer: AppContainer) {
             )
         }
 
+        composable(Destinations.ContentSources) {
+            val viewModel: ContentSourcesViewModel = viewModel(
+                factory = viewModelFactory {
+                    ContentSourcesViewModel(
+                        appContainer.contentSourceRepository,
+                        appContainer.channelHandleResolver,
+                    )
+                },
+            )
+            ContentSourcesScreen(
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() },
+            )
+        }
+
         composable(Destinations.InRide) {
             val viewModel: InRideViewModel = viewModel(
                 factory = viewModelFactory {
@@ -178,6 +197,32 @@ fun OpenRideNavHost(appContainer: AppContainer) {
                         launchSingleTop = true
                     }
                 },
+            )
+        }
+
+        composable(
+            route = Destinations.Creator,
+            arguments = listOf(navArgument(Destinations.SourceIdArg) { type = NavType.LongType }),
+        ) { backStackEntry ->
+            val sourceId = backStackEntry.arguments?.getLong(Destinations.SourceIdArg) ?: 0L
+            val viewModel: CreatorViewModel = viewModel(
+                key = "creator_$sourceId",
+                factory = viewModelFactory {
+                    CreatorViewModel(
+                        appContainer.contentRepository,
+                        appContainer.rideSessionManager,
+                        appContainer.activeProfileHolder,
+                        appContainer.rideRepository,
+                        sourceId,
+                    )
+                },
+            )
+            CreatorScreen(
+                viewModel = viewModel,
+                onStartVideoRide = { videoId ->
+                    navController.navigate(Destinations.videoRide(videoId))
+                },
+                onBack = { navController.popBackStack() },
             )
         }
 

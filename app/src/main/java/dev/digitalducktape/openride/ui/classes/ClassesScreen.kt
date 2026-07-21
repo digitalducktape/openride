@@ -7,74 +7,94 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
 import dev.digitalducktape.openride.core.content.ChannelSection
 import dev.digitalducktape.openride.core.content.Video
-import dev.digitalducktape.openride.ui.common.TimeFormat
 import dev.digitalducktape.openride.ui.theme.MetricTextStyles
-import dev.digitalducktape.openride.ui.theme.OpenRideColors
 import kotlinx.coroutines.launch
 
-private val CardWidth = 280.dp
-private val CardThumbnailHeight = 158.dp
-
 /**
- * Classes tab (PRD P0-6, T10/v2): one horizontal row per configured YouTube channel, each
- * video a card with thumbnail/title/duration-when-known. Tapping a card starts a ride for
- * the active profile and opens the in-app player with metrics overlaid
- * ([dev.digitalducktape.openride.ui.ride.VideoRideScreen]) — superseding v1's handoff to
- * the YouTube app, see `docs/DECISIONS.md`.
+ * Classes tab: browse by creator, or filter the whole catalog at once.
+ *
+ * Two layouts, one screen. With the default sort and no length filter the tab shows one
+ * horizontal row per configured creator, which is how someone browses when they don't have
+ * something specific in mind. Choosing a sort or a length is a question about the entire
+ * catalog ("a 30-minute class, any creator"), so those switch to a flat grid — per-creator
+ * rows can't answer it. Category chips narrow both layouts.
  */
 @Composable
 fun ClassesScreen(
     viewModel: ClassesViewModel,
     onStartVideoRide: (videoId: String) -> Unit,
+    onOpenCreator: (sourceId: Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val takenVideos by viewModel.takenVideos.collectAsState(initial = emptyMap())
+    val filters by viewModel.filters.collectAsState()
+    val rows by viewModel.rows.collectAsState()
+    val gridVideos by viewModel.gridVideos.collectAsState()
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) { viewModel.refresh() }
+
+    val startRide: (Video) -> Unit = { video ->
+        if (viewModel.startRideForVideo(video.id)) onStartVideoRide(video.id)
+    }
 
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         when (val state = uiState) {
             is ClassesUiState.Loading -> LoadingContent()
             is ClassesUiState.Loaded -> LoadedContent(
-                state = state,
+                anyRefreshFailed = state.anyRefreshFailed,
+                filters = filters,
+                rows = rows,
+                gridVideos = gridVideos,
                 takenVideos = takenVideos,
-                onVideoSelected = { video ->
-                    if (viewModel.startRideForVideo(video.id)) onStartVideoRide(video.id)
-                },
+                onCategorySelected = viewModel::setCategory,
+                onSortSelected = viewModel::setSort,
+                onLengthSelected = viewModel::setLength,
+                onVideoSelected = startRide,
+                onOpenCreator = onOpenCreator,
+                onRandomRide = { viewModel.randomVideo()?.let(startRide) },
                 onRetry = { scope.launch { viewModel.refresh() } },
             )
         }
@@ -90,56 +110,111 @@ private fun LoadingContent(modifier: Modifier = Modifier) {
 
 @Composable
 private fun LoadedContent(
-    state: ClassesUiState.Loaded,
+    anyRefreshFailed: Boolean,
+    filters: ClassFilters,
+    rows: List<ChannelSection>,
+    gridVideos: List<Video>?,
     takenVideos: Map<String, Long>,
+    onCategorySelected: (CategoryFilter) -> Unit,
+    onSortSelected: (ClassSort) -> Unit,
+    onLengthSelected: (LengthFilter) -> Unit,
     onVideoSelected: (Video) -> Unit,
+    onOpenCreator: (Long) -> Unit,
+    onRandomRide: () -> Unit,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val nonEmptySections = state.sections.filter { it.videos.isNotEmpty() }
+    val hasAnything = gridVideos?.isNotEmpty() ?: rows.any { it.videos.isNotEmpty() }
 
     Column(modifier = modifier.fillMaxSize().padding(vertical = 32.dp, horizontal = 48.dp)) {
-        Text(
-            text = "Classes",
-            style = MaterialTheme.typography.headlineLarge,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground,
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Classes",
+                style = MaterialTheme.typography.headlineLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+            // No dice/shuffle glyph is available without adding material-icons-extended (this
+            // app only depends on material-icons-core), so the button is text-only rather
+            // than pulling in a new dependency for one icon.
+            Button(onClick = onRandomRide, enabled = hasAnything) {
+                Text(text = "Random Ride")
+            }
+        }
+
+        FilterBar(
+            filters = filters,
+            onCategorySelected = onCategorySelected,
+            onSortSelected = onSortSelected,
+            onLengthSelected = onLengthSelected,
+            modifier = Modifier.padding(top = 16.dp),
         )
 
-        if (state.anyRefreshFailed) {
+        if (anyRefreshFailed) {
             RefreshFailedBanner(modifier = Modifier.padding(top = 16.dp))
         }
 
-        if (nonEmptySections.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "No classes available right now — check your connection and try again",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        text = "Tap to retry",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier
-                            .padding(top = 12.dp)
-                            .clickable(onClick = onRetry),
+        if (!hasAnything) {
+            EmptyContent(isFiltered = !filters.isDefaultBrowse, onRetry = onRetry)
+        } else if (gridVideos != null) {
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(minSize = CardWidth),
+                modifier = Modifier.padding(top = 20.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp),
+                contentPadding = PaddingValues(bottom = 24.dp),
+            ) {
+                items(gridVideos, key = { it.id }) { video ->
+                    VideoCard(
+                        video = video,
+                        takenEpochMs = takenVideos[video.id],
+                        onClick = { onVideoSelected(video) },
                     )
                 }
             }
         } else {
             LazyColumn(
-                modifier = Modifier.padding(top = 16.dp),
+                modifier = Modifier.padding(top = 4.dp),
                 contentPadding = PaddingValues(bottom = 24.dp),
             ) {
-                items(nonEmptySections, key = { it.channelId }) { section ->
+                items(rows, key = { it.sourceId }) { section ->
                     ChannelRow(
                         section = section,
                         takenVideos = takenVideos,
                         onVideoSelected = onVideoSelected,
+                        onOpenCreator = { onOpenCreator(section.sourceId) },
                     )
                 }
+            }
+        }
+    }
+}
+
+/** Empty state: a filter that matched nothing is a different problem than no content at all. */
+@Composable
+private fun EmptyContent(isFiltered: Boolean, onRetry: () -> Unit, modifier: Modifier = Modifier) {
+    Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = if (isFiltered) {
+                    "No classes match these filters"
+                } else {
+                    "No classes available right now — check your connection and try again"
+                },
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (!isFiltered) {
+                Text(
+                    text = "Tap to retry",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 12.dp).clickable(onClick = onRetry),
+                )
             }
         }
     }
@@ -162,20 +237,108 @@ private fun RefreshFailedBanner(modifier: Modifier = Modifier) {
 }
 
 @Composable
+private fun FilterBar(
+    filters: ClassFilters,
+    onCategorySelected: (CategoryFilter) -> Unit,
+    onSortSelected: (ClassSort) -> Unit,
+    onLengthSelected: (LengthFilter) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        CategoryFilter.entries.forEach { category ->
+            FilterChip(
+                selected = filters.category == category,
+                onClick = { onCategorySelected(category) },
+                label = { Text(category.label) },
+            )
+        }
+
+        Spacer(modifier = Modifier.width(12.dp))
+
+        DropdownFilter(
+            label = filters.sort.label,
+            options = ClassSort.entries.map { it to it.label },
+            onSelected = onSortSelected,
+        )
+        DropdownFilter(
+            label = filters.length.label,
+            options = LengthFilter.entries.map { it to it.label },
+            onSelected = onLengthSelected,
+        )
+    }
+}
+
+/** A compact dropdown — the bike's screen is wide but touch targets need to stay large. */
+@Composable
+private fun <T> DropdownFilter(
+    label: String,
+    options: List<Pair<T, String>>,
+    onSelected: (T) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Box(modifier = modifier) {
+        OutlinedButton(onClick = { expanded = true }) {
+            Text(label)
+            Icon(
+                imageVector = Icons.Filled.ArrowDropDown,
+                contentDescription = null,
+                modifier = Modifier.padding(start = 4.dp),
+            )
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEach { (value, text) ->
+                DropdownMenuItem(
+                    text = { Text(text) },
+                    onClick = {
+                        expanded = false
+                        onSelected(value)
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun ChannelRow(
     section: ChannelSection,
     takenVideos: Map<String, Long>,
     onVideoSelected: (Video) -> Unit,
+    onOpenCreator: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.padding(top = 28.dp)) {
-        // Tracked-caps shelf eyebrow (v2 redesign spec) — the bike app labels its content
-        // shelves this way rather than with title-case headings.
-        Text(
-            text = section.channelName.uppercase(),
-            style = MetricTextStyles.SectionEyebrow,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        // Tapping the shelf eyebrow opens the creator's own page — their full recent catalog
+        // plus the playlists they've curated, which the single row here can't show.
+        Row(
+            // Sized to a real touch target for a screen operated mid-ride, without growing the
+            // shelf's visual rhythm — the eyebrow text stays centered at its normal size.
+            modifier = Modifier
+                .heightIn(min = 48.dp)
+                .clickable(onClick = onOpenCreator),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = section.channelName.uppercase(),
+                style = MetricTextStyles.SectionEyebrow,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            // KeyboardArrowRight stands in for a chevron glyph — ChevronRight itself lives in
+            // material-icons-extended, which this app doesn't depend on (see the Random Ride
+            // button above for the same constraint).
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = "Open ${section.channelName}",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp),
+            )
+        }
         LazyRow(
             modifier = Modifier.padding(top = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -188,107 +351,5 @@ private fun ChannelRow(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun VideoCard(
-    video: Video,
-    takenEpochMs: Long?,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier
-            .width(CardWidth)
-            .clickable(onClick = onClick),
-    ) {
-        Box {
-            AsyncImage(
-                model = video.thumbnailUrl,
-                contentDescription = video.title,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(CardThumbnailHeight)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-            )
-            // "Already ridden" badge (v2): when this class was last taken by the active
-            // rider — the reminder that keeps someone from unknowingly repeating a class.
-            takenEpochMs?.let { epochMs ->
-                TakenBadge(
-                    epochMs = epochMs,
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(6.dp),
-                )
-            }
-            // Duration is only shown when known — the RSS feed never includes it and
-            // oEmbed doesn't reliably either (see YouTubeContentRepository), so most
-            // videos simply won't have a badge here rather than showing a fake "0:00".
-            video.durationSec?.let { seconds ->
-                DurationBadge(
-                    seconds = seconds,
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(6.dp),
-                )
-            }
-        }
-        Text(
-            text = video.title,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onBackground,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 8.dp),
-        )
-    }
-}
-
-/** Check + "TAKEN JUL 19" pill over the thumbnail of an already-ridden class. */
-@Composable
-private fun TakenBadge(epochMs: Long, modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier
-            .background(
-                color = MaterialTheme.colorScheme.background.copy(alpha = 0.85f),
-                shape = RoundedCornerShape(6.dp),
-            )
-            .padding(horizontal = 6.dp, vertical = 3.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            imageVector = Icons.Filled.Check,
-            contentDescription = null,
-            tint = OpenRideColors.Success,
-            modifier = Modifier.size(12.dp),
-        )
-        Text(
-            text = TakenLabel.format(epochMs),
-            style = MetricTextStyles.UnitLabel,
-            color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.padding(start = 4.dp),
-        )
-    }
-}
-
-@Composable
-private fun DurationBadge(seconds: Int, modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier
-            .background(
-                color = MaterialTheme.colorScheme.background.copy(alpha = 0.8f),
-                shape = RoundedCornerShape(6.dp),
-            )
-            .padding(horizontal = 6.dp, vertical = 2.dp),
-    ) {
-        Text(
-            text = TimeFormat.elapsed(seconds),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onBackground,
-        )
     }
 }

@@ -23,6 +23,9 @@ object Destinations {
     /** Opt-in self-updater screen (PRD #22/T22), reachable from the Profile tab. */
     const val AppUpdate = "app_update"
 
+    /** Rider-managed Classes catalog (channels and playlists), reachable from the Profile tab. */
+    const val ContentSources = "content_sources"
+
     private const val RideSummaryBase = "ride_summary"
     const val RideIdArg = "rideId"
     const val RideSummary = "$RideSummaryBase/{$RideIdArg}"
@@ -36,6 +39,13 @@ object Destinations {
     const val VideoRide = "$VideoRideBase/{$VideoIdArg}"
 
     fun videoRide(videoId: String) = "$VideoRideBase/$videoId"
+
+    /** A creator's own page: their recent classes plus the playlists they've curated. */
+    private const val CreatorBase = "creator"
+    const val SourceIdArg = "sourceId"
+    const val Creator = "$CreatorBase/{$SourceIdArg}"
+
+    fun creator(sourceId: Long) = "$CreatorBase/$sourceId"
 }
 
 /** Nested-tab routes inside [Destinations.Main]'s inner `NavHost`. */

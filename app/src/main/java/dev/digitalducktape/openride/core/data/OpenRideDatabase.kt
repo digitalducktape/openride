@@ -3,15 +3,18 @@ package dev.digitalducktape.openride.core.data
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
+import dev.digitalducktape.openride.core.content.ContentSource
+import dev.digitalducktape.openride.core.content.ContentSourceDao
 
 @Database(
-    entities = [Profile::class, Ride::class, RideSample::class],
-    version = 4,
+    entities = [Profile::class, Ride::class, RideSample::class, ContentSource::class],
+    version = 5,
     exportSchema = true,
 )
 abstract class OpenRideDatabase : RoomDatabase() {
     abstract fun profileDao(): ProfileDao
     abstract fun rideDao(): RideDao
+    abstract fun contentSourceDao(): ContentSourceDao
 
     companion object {
         const val DATABASE_NAME = "openride.db"
@@ -52,5 +55,30 @@ val MIGRATION_2_3 = object : androidx.room.migration.Migration(2, 3) {
 val MIGRATION_3_4 = object : androidx.room.migration.Migration(3, 4) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("ALTER TABLE profiles ADD COLUMN avatarPhotoPath TEXT")
+    }
+}
+
+/**
+ * Adds the rider-manageable Classes catalog (`content_sources`): the channel list moves out
+ * of the hard-coded `ChannelConfig` object so channels and playlists can be added and hidden
+ * at runtime. The table is created empty and seeded on first access by
+ * [dev.digitalducktape.openride.core.content.ContentSourceRepository.seedIfEmpty], so an
+ * upgrading install gets the same catalog a fresh one does — including channels added to the
+ * seed list in later app versions, for anyone whose table is still empty.
+ */
+val MIGRATION_4_5 = object : androidx.room.migration.Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `content_sources` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`sourceType` TEXT NOT NULL, `youtubeId` TEXT NOT NULL, " +
+                "`displayName` TEXT NOT NULL, `category` TEXT NOT NULL, " +
+                "`builtIn` INTEGER NOT NULL, `hidden` INTEGER NOT NULL, " +
+                "`position` INTEGER NOT NULL)",
+        )
+        db.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS `index_content_sources_youtubeId` " +
+                "ON `content_sources` (`youtubeId`)",
+        )
     }
 }
