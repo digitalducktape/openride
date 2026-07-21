@@ -174,7 +174,12 @@ class YouTubeContentRepository(
             pageParser.parsePlaylists(
                 fetcher.fetchText("https://www.youtube.com/channel/${source.youtubeId}/playlists"),
             )
-        }.orEmpty().filter { ClassRelevance.isCyclingTitle(it.title) }
+        }.orEmpty()
+            .filter { ClassRelevance.isCyclingTitle(it.title) }
+            // Same reasoning as rideable()'s dedup: the Creator screen keys its playlist
+            // LazyColumn by `playlist.id`, so a page listing a playlist twice would crash
+            // Compose with "Key ... was already used". Collapse duplicates by id, first wins.
+            .distinctBy { it.id }
     }
 
     /**
@@ -188,6 +193,13 @@ class YouTubeContentRepository(
             (video.durationSec == null || video.durationSec >= MIN_CLASS_DURATION_SEC) &&
                 ClassRelevance.isCyclingTitle(video.title)
         }
+            // A page can list the same video more than once (a pinned tile that also appears in
+            // the grid, a video in two spots of a playlist). Two Video objects sharing an id
+            // collide the `key = { it.id }` in the Creator screen's LazyRow and crash Compose
+            // ("Key ... was already used"), so collapse duplicates here — the single choke point
+            // every displayed list (latest shelf and each playlist) passes through. distinctBy
+            // keeps the first occurrence, preserving page order.
+            .distinctBy { it.id }
 
     /**
      * Runs a fetch with one retry, converting *any* failure — network error, malformed XML,
