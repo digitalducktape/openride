@@ -7,10 +7,13 @@ import androidx.room.Room
 import dev.digitalducktape.openride.core.backup.AutoBackupManager
 import dev.digitalducktape.openride.core.backup.BackupRepository
 import dev.digitalducktape.openride.core.backup.MediaStoreAutoBackupStore
+import dev.digitalducktape.openride.core.content.ChannelHandleResolver
+import dev.digitalducktape.openride.core.content.ContentSourceRepository
 import dev.digitalducktape.openride.core.content.YouTubeContentRepository
 import dev.digitalducktape.openride.core.data.MIGRATION_1_2
 import dev.digitalducktape.openride.core.data.MIGRATION_2_3
 import dev.digitalducktape.openride.core.data.MIGRATION_3_4
+import dev.digitalducktape.openride.core.data.MIGRATION_4_5
 import dev.digitalducktape.openride.core.data.OpenRideDatabase
 import dev.digitalducktape.openride.core.data.ProfileRepository
 import dev.digitalducktape.openride.core.data.RideRepository
@@ -52,7 +55,7 @@ class AppContainer(private val applicationContext: Context) {
             applicationContext,
             OpenRideDatabase::class.java,
             OpenRideDatabase.DATABASE_NAME,
-        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build()
+        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build()
     }
 
     /** Rider avatar photos on disk (camera capture feature); paths live on [dev.digitalducktape.openride.core.data.Profile.avatarPhotoPath]. */
@@ -136,9 +139,19 @@ class AppContainer(private val applicationContext: Context) {
         )
     }
 
+    /** The Classes tab's configured source list — seeded catalog plus rider additions. */
+    val contentSourceRepository: ContentSourceRepository by lazy {
+        ContentSourceRepository(database.contentSourceDao())
+    }
+
     /** Curated YouTube-channel content for the Classes browser (PRD P0-6, T9/T10). */
     val contentRepository: YouTubeContentRepository by lazy {
-        YouTubeContentRepository(applicationContext)
+        YouTubeContentRepository(applicationContext, contentSourceRepository)
+    }
+
+    /** Resolves pasted channel/playlist links for the Content Sources screen. */
+    val channelHandleResolver: ChannelHandleResolver by lazy {
+        ChannelHandleResolver()
     }
 
     /** The currently-loaded GPX route overlay for the ride screen (PRD #21/T21), if any. */

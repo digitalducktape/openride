@@ -11,10 +11,17 @@ import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 
 /**
- * Whole-database backup & restore to one shareable file (PRD P1-8) — the tablet is otherwise
- * a single point of failure for years of ride history. Backs up every profile, ride, and
- * per-second sample as one JSON [BackupSnapshot]; restoring replaces the current database
- * entirely inside one transaction (all-or-nothing).
+ * Backup & restore to one shareable file (PRD P1-8) — the tablet is otherwise a single point
+ * of failure for years of ride history. Backs up every profile, ride, and per-second sample as
+ * one JSON [BackupSnapshot]; restoring replaces the current database entirely inside one
+ * transaction (all-or-nothing).
+ *
+ * **Not actually whole-database:** the `content_sources` table (a rider's added channels and
+ * playlists, plus which built-ins they've hidden) is deliberately excluded from
+ * [BackupSnapshot]. See `docs/DECISIONS.md` ("Content Sources are not covered by
+ * backup/restore") for why and the consequence: after a reinstall + restore, rides and
+ * profiles come back but any rider-added channels/playlists and hidden-state are silently
+ * gone, reset to just the seeded built-in catalog.
  *
  * @param avatarPhotoStore where rider avatar photos live on disk. When provided, each
  *   profile's photo travels *inside* the backup as base64 bytes and is re-materialized as a

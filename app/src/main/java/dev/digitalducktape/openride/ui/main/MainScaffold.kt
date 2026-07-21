@@ -120,6 +120,9 @@ fun MainScaffold(
                     onStartVideoRide = { videoId ->
                         outerNavController.navigate(Destinations.videoRide(videoId))
                     },
+                    onOpenCreator = { sourceId ->
+                        outerNavController.navigate(Destinations.creator(sourceId))
+                    },
                 )
             }
             composable(MainTabs.History) {
@@ -167,6 +170,9 @@ fun MainScaffold(
                         outerNavController.navigate(Destinations.HrPairing)
                     },
                     onManageAppUpdates = { outerNavController.navigate(Destinations.AppUpdate) },
+                    onManageContentSources = {
+                        outerNavController.navigate(Destinations.ContentSources)
+                    },
                     routeHolder = appContainer.routeHolder,
                 )
             }
