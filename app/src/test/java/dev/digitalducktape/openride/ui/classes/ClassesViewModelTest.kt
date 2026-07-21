@@ -27,6 +27,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -310,10 +311,12 @@ class ClassesViewModelTest {
         save(videoId = "classB", startEpochMs = 3_000L)
         save(videoId = null, startEpochMs = 4_000L) // quick start, never badged
 
-        assertEquals(
-            mapOf("classA" to 2_000L, "classB" to 3_000L),
-            viewModel.takenVideos.first(),
-        )
+        // takenVideos is a StateFlow fed by Room's observe flow, which emits on Room's own
+        // executor off the test scheduler. `.first()` would return whatever snapshot is current
+        // — often still the initial emptyMap before the writes above have propagated — which
+        // flaked under full-suite load. Await the flow actually reaching the expected state.
+        val expected = mapOf("classA" to 2_000L, "classB" to 3_000L)
+        assertEquals(expected, viewModel.takenVideos.first { it == expected })
     }
 
     @Test
@@ -422,13 +425,19 @@ class ClassesViewModelTest {
             ),
             emptyList(),
         )
-        // Wait for the Room-backed taken flow to reflect the saved ride before toggling, so the
-        // rows recompute sees the completed class (the flow rows read from is the same instance).
+        // Wait for the Room-backed taken flow to reflect the saved ride before toggling. That
+        // emission originates on Room's own executor, off the test scheduler.
         viewModel.takenVideos.first { it.containsKey("vidLong00001") }
         viewModel.setHideTaken(true)
 
-        val after = viewModel.rows.value.single().videos.map { it.id }
-        assertFalse(after.contains("vidLong00001"))
+        // `rows` is a downstream combine(loadedSections, _filters, takenVideos) with its own
+        // collector; awaiting `takenVideos` above does not guarantee `rows` has recomputed with
+        // the toggled filter yet. Reading `rows.value` synchronously here raced that recompute
+        // and flaked under full-suite load, so await `rows` actually dropping the completed
+        // class instead of snapshotting it.
+        val after = viewModel.rows
+            .map { sections -> sections.single().videos.map { it.id } }
+            .first { ids -> !ids.contains("vidLong00001") }
         assertEquals(before.size - 1, after.size)
     }
 }

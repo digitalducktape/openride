@@ -345,6 +345,56 @@ class YouTubeContentRepositoryTest {
     }
 
     @Test
+    fun `a video listed twice on the page is collapsed to a single entry`() = runTest {
+        // YouTube pages can list the same video more than once (e.g. a video that is both
+        // pinned and appears again in the grid). Two Video objects sharing an id would collide
+        // the `key = { it.id }` in the Creator screen's LazyRow and crash Compose with
+        // "Key ... was already used", so the repository must deduplicate by id.
+        val duplicatePage = """
+            <script>var ytInitialData = {"contents":{"tabs":[{"tabRenderer":{"content":{
+              "richGridRenderer":{"contents":[
+                {"richItemRenderer":{"content":{"lockupViewModel":{
+                  "contentId":"dupRideVid01","contentType":"LOCKUP_CONTENT_TYPE_VIDEO",
+                  "contentImage":{"thumbnailViewModel":{"overlays":[{"thumbnailBottomOverlayViewModel":{
+                    "badges":[{"thumbnailBadgeViewModel":{"text":"45:00"}}]}}]}},
+                  "metadata":{"lockupMetadataViewModel":{
+                    "title":{"content":"45 Minute Endurance Ride"}}}}}}},
+                {"richItemRenderer":{"content":{"lockupViewModel":{
+                  "contentId":"dupRideVid01","contentType":"LOCKUP_CONTENT_TYPE_VIDEO",
+                  "contentImage":{"thumbnailViewModel":{"overlays":[{"thumbnailBottomOverlayViewModel":{
+                    "badges":[{"thumbnailBadgeViewModel":{"text":"45:00"}}]}}]}},
+                  "metadata":{"lockupMetadataViewModel":{
+                    "title":{"content":"45 Minute Endurance Ride"}}}}}}}
+              ]}}}}]}};</script>
+        """.trimIndent()
+
+        val videos = repository(fetcher(page = { duplicatePage }, feed = null))
+            .playlistVideos("PLtheme000000001", "Themed Rides")
+
+        assertEquals(listOf("dupRideVid01"), videos.map { it.id })
+    }
+
+    @Test
+    fun `a playlist listed twice on the page is collapsed to a single entry`() = runTest {
+        // A page listing the same playlist twice would collide the `key = { it.playlist.id }`
+        // in the Creator screen's playlist LazyColumn and crash Compose, so the repository must
+        // deduplicate playlists by id too.
+        val duplicatePlaylists = """
+            <script>var ytInitialData = {"contents":{"items":[
+              {"lockupViewModel":{"contentId":"PLspin000000001","contentType":"LOCKUP_CONTENT_TYPE_PLAYLIST",
+                "metadata":{"lockupMetadataViewModel":{"title":{"content":"Spin Classes: Theme Rides"}}}}},
+              {"lockupViewModel":{"contentId":"PLspin000000001","contentType":"LOCKUP_CONTENT_TYPE_PLAYLIST",
+                "metadata":{"lockupMetadataViewModel":{"title":{"content":"Spin Classes: Theme Rides"}}}}}
+            ]}};</script>
+        """.trimIndent()
+        val source = sources.visibleOnce().single()
+
+        val content = repository(fetcher(playlists = { duplicatePlaylists })).creatorContent(source.id)!!
+
+        assertEquals(listOf("PLspin000000001"), content.playlists.map { it.id })
+    }
+
+    @Test
     fun `playlists whose title is not a cycling class are dropped`() = runTest {
         val mixedPlaylists = """
             <script>var ytInitialData = {"contents":{"items":[
