@@ -19,6 +19,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -54,7 +55,11 @@ fun VideoCard(
                     .fillMaxWidth()
                     .height(CardThumbnailHeight)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    // A feed-fallback class can't be verified as public, so it can't be started
+                    // (ClassesViewModel.startRideForVideo refuses it). Dim it and badge it so it
+                    // reads as unavailable rather than looking like a normal, tappable class.
+                    .alpha(if (video.startable) 1f else 0.4f),
             )
             // "Already ridden" badge (v2): when this class was last taken by the active
             // rider — the reminder that keeps someone from unknowingly repeating a class.
@@ -77,17 +82,39 @@ fun VideoCard(
                         .padding(6.dp),
                 )
             }
+            if (!video.startable) {
+                UnavailableBadge(
+                    modifier = Modifier
+                        .align(Alignment.Center),
+                )
+            }
         }
         Text(
             text = video.title,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onBackground,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = if (video.startable) 1f else 0.5f),
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 8.dp),
         )
     }
+}
+
+/** Overlay marking a feed-fallback class that can't be started until a page fetch verifies it. */
+@Composable
+private fun UnavailableBadge(modifier: Modifier = Modifier) {
+    Text(
+        text = "Unavailable — refresh",
+        style = MetricTextStyles.UnitLabel,
+        color = MaterialTheme.colorScheme.onBackground,
+        modifier = modifier
+            .background(
+                color = MaterialTheme.colorScheme.background.copy(alpha = 0.85f),
+                shape = RoundedCornerShape(6.dp),
+            )
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+    )
 }
 
 /** Check + "TAKEN JUL 19" pill over the thumbnail of an already-ridden class. */

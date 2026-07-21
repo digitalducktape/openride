@@ -160,7 +160,10 @@ class YouTubeContentRepository(
                     publishedById[video.id]?.let { video.copy(publishedEpochMs = it) } ?: video
                 }
             }
-            feedVideos != null -> feedVideos
+            // Page fetch failed: the feed is all we have, but it carries no members-only marker,
+            // so these videos can't be verified as public. Show them (the row isn't empty) but
+            // mark them non-startable — a later successful page fetch re-verifies and clears it.
+            feedVideos != null -> feedVideos.map { it.copy(startable = false) }
             else -> null
         }
     }
@@ -171,12 +174,20 @@ class YouTubeContentRepository(
             pageParser.parsePlaylists(
                 fetcher.fetchText("https://www.youtube.com/channel/${source.youtubeId}/playlists"),
             )
-        }.orEmpty()
+        }.orEmpty().filter { ClassRelevance.isCyclingTitle(it.title) }
     }
 
-    /** Drops classes too short to be a real ride; unknown duration is always kept. */
+    /**
+     * Keeps only videos worth showing as a class: long enough to be a real ride (unknown
+     * duration is kept — it's the feed-fallback case, not a short) and whose title reads as a
+     * cycling class. The relevance check is what keeps a creator's *other* content — sculpt
+     * and strength classes, vlogs — out of a cycling catalog; see [ClassRelevance].
+     */
     private fun rideable(videos: List<Video>): List<Video> =
-        videos.filter { video -> video.durationSec == null || video.durationSec >= MIN_CLASS_DURATION_SEC }
+        videos.filter { video ->
+            (video.durationSec == null || video.durationSec >= MIN_CLASS_DURATION_SEC) &&
+                ClassRelevance.isCyclingTitle(video.title)
+        }
 
     /**
      * Runs a fetch with one retry, converting *any* failure — network error, malformed XML,

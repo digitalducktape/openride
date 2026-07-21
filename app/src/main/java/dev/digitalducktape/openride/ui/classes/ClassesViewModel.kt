@@ -11,9 +11,12 @@ import dev.digitalducktape.openride.core.ride.RideSessionManager
 import kotlin.random.Random
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
@@ -48,6 +51,14 @@ class ClassesViewModel(
     val filters: StateFlow<ClassFilters> = _filters.asStateFlow()
 
     /**
+     * One-shot user notices (e.g. a refused non-startable class). `extraBufferCapacity = 1` with
+     * no replay lets [startRideForVideo]'s non-suspending `tryEmit` succeed without dropping the
+     * message, while a rider who wasn't collecting doesn't later get a stale toast.
+     */
+    private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val messages: SharedFlow<String> = _messages.asSharedFlow()
+
+    /**
      * Bumped whenever Random sort is (re-)selected, so the shuffle is stable while the rider
      * scrolls but reshuffles when they ask for a new order.
      */
@@ -57,18 +68,35 @@ class ClassesViewModel(
         .map { state -> (state as? ClassesUiState.Loaded)?.sections.orEmpty() }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
-    /** Creator rows for browse mode — already narrowed to the chosen category. */
-    val rows: StateFlow<List<ChannelSection>> = combine(loadedSections, _filters) { sections, filters ->
-        ClassFiltering.rows(sections, filters.category).filter { it.videos.isNotEmpty() }
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    /**
+     * When the active profile last rode each class, keyed by video id (v2 "taken" badges).
+     * Live Room flow, so finishing a video ride badges its card as soon as the rider is
+     * back on this tab. A `rides` row exists only for a finished, saved ride, so this is
+     * exactly the set of *completed* classes the "Hide completed" filter acts on.
+     */
+    val takenVideos: StateFlow<Map<String, Long>> =
+        activeProfileHolder.activeProfileId.flatMapLatest { profileId ->
+            if (profileId == null) {
+                flowOf(emptyMap())
+            } else {
+                rideRepository.observeTakenVideos(profileId)
+                    .map { taken -> taken.associate { it.videoId to it.lastTakenEpochMs } }
+            }
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+
+    /** Creator rows for browse mode — narrowed to the chosen category and hide-completed state. */
+    val rows: StateFlow<List<ChannelSection>> =
+        combine(loadedSections, _filters, takenVideos) { sections, filters, taken ->
+            ClassFiltering.rows(sections, filters, taken.keys).filter { it.videos.isNotEmpty() }
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     /** The flat grid, or `null` while the tab should show creator rows instead. */
     val gridVideos: StateFlow<List<Video>?> =
-        combine(loadedSections, _filters, shuffleSeed) { sections, filters, seed ->
+        combine(loadedSections, _filters, shuffleSeed, takenVideos) { sections, filters, seed, taken ->
             if (filters.isDefaultBrowse) {
                 null
             } else {
-                ClassFiltering.grid(sections, filters, Random(seed))
+                ClassFiltering.grid(sections, filters, Random(seed), taken.keys)
             }
         }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
@@ -85,32 +113,23 @@ class ClassesViewModel(
         _filters.value = _filters.value.copy(length = length)
     }
 
+    fun setHideTaken(hide: Boolean) {
+        _filters.value = _filters.value.copy(hideTaken = hide)
+    }
+
     /**
      * A uniformly random class from everything the current filters allow — the Random Ride
      * button. Returns `null` when nothing matches (button is disabled in that state), and
-     * deliberately ignores the *sort*, which only affects presentation order.
+     * deliberately ignores the *sort*, which only affects presentation order. Only [Video.startable]
+     * videos are eligible, so Random Ride never lands the rider on a class that won't start.
      */
     fun randomVideo(): Video? =
         ClassFiltering.grid(
             loadedSections.value,
             _filters.value.copy(sort = ClassSort.Newest),
             random,
-        ).randomOrNull(random)
-
-    /**
-     * When the active profile last rode each class, keyed by video id (v2 "taken" badges).
-     * Live Room flow, so finishing a video ride badges its card as soon as the rider is
-     * back on this tab.
-     */
-    val takenVideos: Flow<Map<String, Long>> =
-        activeProfileHolder.activeProfileId.flatMapLatest { profileId ->
-            if (profileId == null) {
-                flowOf(emptyMap())
-            } else {
-                rideRepository.observeTakenVideos(profileId)
-                    .map { taken -> taken.associate { it.videoId to it.lastTakenEpochMs } }
-            }
-        }
+            takenVideos.value.keys,
+        ).filter { it.startable }.randomOrNull(random)
 
     /**
      * Fetches (or re-fetches) all configured channels. Safe to call repeatedly — in particular,
@@ -139,11 +158,20 @@ class ClassesViewModel(
      * player (v2 spec) — same semantics as
      * [dev.digitalducktape.openride.ui.home.HomeViewModel.startQuickRide]: returns `false`
      * (and starts nothing) when no profile is active, and the caller treats that as
-     * "not navigable." [videoId] is recorded on the persisted ride for the "taken" badges.
+     * "not navigable." The video's id is recorded on the persisted ride for the "taken" badges.
+     *
+     * A non-[Video.startable] video (feed-fallback, unverifiable as public) is refused here with
+     * a transient [messages] notice rather than started — starting one would strand the rider on
+     * YouTube's members-only wall against a black player. It stays refused until a page fetch
+     * re-verifies it.
      */
-    fun startRideForVideo(videoId: String): Boolean {
+    fun startRideForVideo(video: Video): Boolean {
+        if (!video.startable) {
+            _messages.tryEmit("Can't verify this class right now — pull to refresh")
+            return false
+        }
         val profileId = activeProfileHolder.activeProfileId.value ?: return false
-        rideSessionManager.start(profileId, videoId)
+        rideSessionManager.start(profileId, video.id)
         return true
     }
 }

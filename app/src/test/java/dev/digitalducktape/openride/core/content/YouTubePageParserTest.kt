@@ -23,7 +23,7 @@ class YouTubePageParserTest {
         val videos = parser.parseVideos(fixture("channel_videos_page.html"), "Test Channel")
 
         assertEquals(listOf("vidLong00001", "vidShort0002", "vidNoDur0003"), videos.map { it.id })
-        assertEquals("Quick HIIT Workout | Instant Inferno", videos[0].title)
+        assertEquals("Quick HIIT Ride | Instant Inferno", videos[0].title)
         assertEquals("Test Channel", videos[0].channelName)
         assertTrue(videos[0].thumbnailUrl.startsWith("https://i.ytimg.com/vi/vidLong00001/"))
     }

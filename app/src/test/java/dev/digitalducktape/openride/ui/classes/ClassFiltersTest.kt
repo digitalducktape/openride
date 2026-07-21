@@ -71,36 +71,39 @@ class ClassFiltersTest {
         assertFalse(ClassFiltering.matchesLength(unknown, LengthFilter.Over45))
     }
 
+    private fun rowsFor(category: CategoryFilter) =
+        ClassFiltering.rows(sections, ClassFilters(category = category), emptySet())
+
     @Test
     fun `rows keeps every section when the category is All`() {
-        assertEquals(listOf(1L, 2L), ClassFiltering.rows(sections, CategoryFilter.All).map { it.sourceId })
+        assertEquals(listOf(1L, 2L), rowsFor(CategoryFilter.All).map { it.sourceId })
     }
 
     @Test
     fun `rows keeps only the matching category`() {
-        assertEquals(listOf(2L), ClassFiltering.rows(sections, CategoryFilter.Scenic).map { it.sourceId })
-        assertEquals(listOf(1L), ClassFiltering.rows(sections, CategoryFilter.Workout).map { it.sourceId })
+        assertEquals(listOf(2L), rowsFor(CategoryFilter.Scenic).map { it.sourceId })
+        assertEquals(listOf(1L), rowsFor(CategoryFilter.Workout).map { it.sourceId })
     }
 
     @Test
     fun `grid sorts newest first by default`() {
         val filters = ClassFilters(sort = ClassSort.Newest)
 
-        val grid = ClassFiltering.grid(sections, filters, Random(0))
+        val grid = ClassFiltering.grid(sections, filters, Random(0), emptySet())
 
         assertEquals(listOf("w50", "s40", "w15", "sNull", "w25"), grid.map { it.id })
     }
 
     @Test
     fun `grid sorts oldest first`() {
-        val grid = ClassFiltering.grid(sections, ClassFilters(sort = ClassSort.Oldest), Random(0))
+        val grid = ClassFiltering.grid(sections, ClassFilters(sort = ClassSort.Oldest), Random(0), emptySet())
 
         assertEquals(listOf("w25", "sNull", "w15", "s40", "w50"), grid.map { it.id })
     }
 
     @Test
     fun `grid random ordering is a permutation of the same videos`() {
-        val grid = ClassFiltering.grid(sections, ClassFilters(sort = ClassSort.Random), Random(7))
+        val grid = ClassFiltering.grid(sections, ClassFilters(sort = ClassSort.Random), Random(7), emptySet())
 
         assertEquals(5, grid.size)
         assertEquals(
@@ -111,8 +114,8 @@ class ClassFiltersTest {
 
     @Test
     fun `grid random ordering is stable for a given seed`() {
-        val first = ClassFiltering.grid(sections, ClassFilters(sort = ClassSort.Random), Random(7))
-        val second = ClassFiltering.grid(sections, ClassFilters(sort = ClassSort.Random), Random(7))
+        val first = ClassFiltering.grid(sections, ClassFilters(sort = ClassSort.Random), Random(7), emptySet())
+        val second = ClassFiltering.grid(sections, ClassFilters(sort = ClassSort.Random), Random(7), emptySet())
 
         assertEquals(first.map { it.id }, second.map { it.id })
     }
@@ -125,7 +128,7 @@ class ClassFiltersTest {
             length = LengthFilter.From20To30,
         )
 
-        assertEquals(listOf("w25"), ClassFiltering.grid(sections, filters, Random(0)).map { it.id })
+        assertEquals(listOf("w25"), ClassFiltering.grid(sections, filters, Random(0), emptySet()).map { it.id })
     }
 
     @Test
@@ -134,5 +137,39 @@ class ClassFiltersTest {
         assertTrue(ClassFilters(category = CategoryFilter.Scenic).isDefaultBrowse)
         assertFalse(ClassFilters(sort = ClassSort.Oldest).isDefaultBrowse)
         assertFalse(ClassFilters(length = LengthFilter.Over45).isDefaultBrowse)
+    }
+
+    @Test
+    fun `hideTaken off keeps completed classes in the grid`() {
+        val grid = ClassFiltering.grid(sections, ClassFilters(hideTaken = false), Random(0), setOf("w15"))
+
+        assertTrue(grid.any { it.id == "w15" })
+    }
+
+    @Test
+    fun `hideTaken on removes completed classes from the grid`() {
+        val grid = ClassFiltering.grid(sections, ClassFilters(hideTaken = true), Random(0), setOf("w15", "s40"))
+
+        assertFalse(grid.any { it.id == "w15" || it.id == "s40" })
+        assertEquals(3, grid.size)
+    }
+
+    @Test
+    fun `hideTaken on removes completed classes from each row`() {
+        val rows = ClassFiltering.rows(sections, ClassFilters(hideTaken = true), setOf("w15"))
+
+        assertEquals(listOf("w25", "w50"), rows.first { it.sourceId == 1L }.videos.map { it.id })
+    }
+
+    @Test
+    fun `hideTaken off leaves rows untouched`() {
+        val rows = ClassFiltering.rows(sections, ClassFilters(hideTaken = false), setOf("w15"))
+
+        assertEquals(listOf("w15", "w25", "w50"), rows.first { it.sourceId == 1L }.videos.map { it.id })
+    }
+
+    @Test
+    fun `hideTaken does not switch out of default browse`() {
+        assertTrue(ClassFilters(hideTaken = true).isDefaultBrowse)
     }
 }

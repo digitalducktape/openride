@@ -13,6 +13,12 @@ package dev.digitalducktape.openride.core.content
  *   key/quota) does not reliably return it either — so this is `null` far more often than
  *   not. Callers must treat `null` as "don't show a duration badge," never as zero.
  * @param publishedEpochMs publish time, for sorting newest-first.
+ * @param startable whether a ride can actually be started from this video. `true` for
+ *   page-verified videos; `false` for videos known only from the RSS feed fallback (used when
+ *   the channel/playlist page fetch fails). The feed carries no members-only marker, so a
+ *   feed-only video can't be confirmed public — it's shown so the row isn't empty, but starting
+ *   it is blocked until a page fetch verifies it, rather than risking a ride against YouTube's
+ *   members-only wall. See `YouTubeContentRepository.fetchVideos`.
  */
 data class Video(
     val id: String,
@@ -21,4 +27,5 @@ data class Video(
     val channelName: String,
     val durationSec: Int?,
     val publishedEpochMs: Long,
+    val startable: Boolean = true,
 )
