@@ -46,6 +46,22 @@ class ContentSourceRepositoryTest {
     }
 
     @Test
+    fun `observeAll seeds the built-in catalog on its own, without seedIfEmpty being called first`() = runTest {
+        // Regression coverage for Finding 2: seedIfEmpty was previously only ever called from
+        // YouTubeContentRepository.channelSections(), so a rider who opened Content Sources
+        // (Home -> Profile -> Content sources) before ever visiting Classes saw an empty list
+        // on a fresh install — and if they then added a channel there, count() > 0 became true
+        // forever and the built-ins were never seeded, with no in-app way to recover them.
+        // observeAll() is the Content Sources screen's only way to see the catalog, so seeding
+        // reliably has to happen right there rather than depending on some other screen having
+        // been opened first.
+        val sources = repository.observeAll().first()
+
+        assertEquals(ChannelConfig.ALL.size, sources.size)
+        assertTrue(sources.all { it.builtIn })
+    }
+
+    @Test
     fun `seedIfEmpty is idempotent`() = runTest {
         repository.seedIfEmpty()
         repository.seedIfEmpty()

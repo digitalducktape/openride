@@ -136,6 +136,53 @@ class YouTubeContentRepositoryTest {
         assertEquals(listOf("vidLong00001", "vidNoDur0003"), section.videos.map { it.id })
     }
 
+    /** A page with exactly one video, under the ten-minute floor, and nothing else. */
+    private fun tooShortPageHtml() = """
+        <!DOCTYPE html><html><body>
+        <script nonce="x">var ytInitialData = {"contents":{"tabs":[{"tabRenderer":{"content":{"richGridRenderer":{"contents":[
+        {"richItemRenderer":{"content":{"lockupViewModel":{
+          "contentId":"vidTooShort1","contentType":"LOCKUP_CONTENT_TYPE_VIDEO",
+          "contentImage":{"thumbnailViewModel":{
+            "image":{"sources":[{"url":"https://i.ytimg.com/vi/vidTooShort1/hqdefault.jpg","width":168}]},
+            "overlays":[{"thumbnailBottomOverlayViewModel":{"badges":[{"thumbnailBadgeViewModel":{"text":"3:00"}}]}}]}},
+          "metadata":{"lockupMetadataViewModel":{
+            "title":{"content":"Too Short To Ride"},
+            "metadata":{"contentMetadataViewModel":{"metadataRows":[{"metadataParts":[
+              {"text":{"content":"1 day ago"}}]}]}}}}}}}}
+        ]}}}}]}};</script>
+        </body></html>
+    """.trimIndent()
+
+    @Test
+    fun `a fetch that succeeds but filters down to nothing keeps the existing cache`() = runTest {
+        // Primes the cache with the normal fixture's two rideable videos.
+        repository(fetcher()).channelSections()
+
+        // A perfectly healthy fetch this time — page and feed both readable — but the only
+        // video on the page is under the ten-minute floor, so the filtered result is empty.
+        // This is exactly as ambiguous as a broken parse (Finding 1): both look like "nothing
+        // to show." Overwriting the last-known-good cache with that empty result would destroy
+        // the offline fallback for good, so the stale cache must win instead.
+        val section = repository(fetcher(page = { tooShortPageHtml() })).channelSections().single()
+
+        assertEquals(listOf("vidLong00001", "vidNoDur0003"), section.videos.map { it.id })
+        // videos is a last-known cached list rather than this fetch's own (empty) result, so
+        // this matches ChannelSection.refreshFailed's documented contract.
+        assertTrue(section.refreshFailed)
+    }
+
+    @Test
+    fun `a fetch that filters down to nothing does not overwrite the on-disk cache`() = runTest {
+        repository(fetcher()).channelSections() // primes the cache
+
+        repository(fetcher(page = { tooShortPageHtml() })).channelSections() // must not blank the cache
+
+        // Everything down now: if the empty filtered result above had been written to the
+        // cache, this would come back empty too instead of the original videos.
+        val section = repository(fetcher(page = null, feed = null)).channelSections().single()
+        assertEquals(listOf("vidLong00001", "vidNoDur0003"), section.videos.map { it.id })
+    }
+
     @Test
     fun `a transient failure is retried once before falling back`() = runTest {
         var attempts = 0
