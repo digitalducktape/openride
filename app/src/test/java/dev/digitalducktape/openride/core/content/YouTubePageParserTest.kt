@@ -83,6 +83,42 @@ class YouTubePageParserTest {
     }
 
     @Test
+    fun `parseVideos drops members-only tiles`() {
+        // Members-only videos appear on a channel's /videos tab (and in playlists) as ordinary
+        // video lockups WITH a real duration — the only thing marking them is a
+        // BADGE_MEMBERS_ONLY badge in the metadata rows. They are unplayable without a paid
+        // membership, so starting one strands the rider on YouTube's "Join this channel" wall
+        // (the exact bug this guards against). The public tile alongside it must survive.
+        val html = """
+            <script>var ytInitialData = {"contents":{"tabs":[{"tabRenderer":{"content":{
+              "richGridRenderer":{"contents":[
+                {"richItemRenderer":{"content":{"lockupViewModel":{
+                  "contentId":"publicVid001","contentType":"LOCKUP_CONTENT_TYPE_VIDEO",
+                  "contentImage":{"thumbnailViewModel":{
+                    "overlays":[{"thumbnailBottomOverlayViewModel":{"badges":[
+                      {"thumbnailBadgeViewModel":{"text":"22:15"}}]}}]}},
+                  "metadata":{"lockupMetadataViewModel":{"title":{"content":"Public Ride"},
+                    "metadata":{"contentMetadataViewModel":{"metadataRows":[{"metadataParts":[
+                      {"text":{"content":"1 day ago"}}]}]}}}}}}}},
+                {"richItemRenderer":{"content":{"lockupViewModel":{
+                  "contentId":"memberVid002","contentType":"LOCKUP_CONTENT_TYPE_VIDEO",
+                  "contentImage":{"thumbnailViewModel":{
+                    "overlays":[{"thumbnailBottomOverlayViewModel":{"badges":[
+                      {"thumbnailBadgeViewModel":{"text":"40:08"}}]}}]}},
+                  "metadata":{"lockupMetadataViewModel":{"title":{"content":"Members Ride"},
+                    "metadata":{"contentMetadataViewModel":{"metadataRows":[
+                      {"badges":[{"badgeViewModel":{"badgeStyle":"BADGE_MEMBERS_ONLY",
+                        "badgeText":"Members only","iconName":"SPONSORSHIP_STAR"}}]},
+                      {"metadataParts":[{"text":{"content":"1 day ago"}}]}]}}}}}}}}
+              ]}}}}]}};</script>
+        """.trimIndent()
+
+        val videos = parser.parseVideos(html, "Test Channel")
+
+        assertEquals(listOf("publicVid001"), videos.map { it.id })
+    }
+
+    @Test
     fun `throws when the page has no ytInitialData`() {
         assertThrows(ContentParseException::class.java) {
             parser.parseVideos("<html><body>signed out wall</body></html>", "Test Channel")
