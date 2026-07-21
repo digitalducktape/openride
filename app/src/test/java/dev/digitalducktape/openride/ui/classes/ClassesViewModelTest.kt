@@ -125,6 +125,66 @@ class ClassesViewModelTest {
     }
 
     @Test
+    fun `a second refresh keeps the previously loaded sections visible instead of resetting to Loading`() = runTest {
+        // Finding 5a: refresh() used to reset state to Loading unconditionally, and the
+        // screen's LaunchedEffect(Unit) { refresh() } re-fires every time the rider returns to
+        // the Classes tab — a full-screen spinner and a blank tab on every visit, not just the
+        // first. The fetcher below captures uiState.value from inside the *second* refresh's
+        // feed fetch, i.e. while that fetch is still in flight and before its own Loaded state
+        // has been written — proving the previous content is still showing at that moment
+        // rather than having been blanked back to Loading.
+        lateinit var viewModel: ClassesViewModel
+        var fetchCount = 0
+        var stateDuringSecondFetch: ClassesUiState? = null
+        val fetcher = FeedFetcher { url ->
+            if (url.contains("feeds/videos.xml")) {
+                fetchCount++
+                if (fetchCount == 2) {
+                    stateDuringSecondFetch = viewModel.uiState.value
+                }
+            }
+            fixtureXml()
+        }
+        val manager = RideSessionManager(FakeBikeDataSource(), rideRepository, backgroundScope)
+        viewModel = ClassesViewModel(repository(fetcher), manager, activeProfileHolder, rideRepository)
+
+        viewModel.refresh() // cold start: nothing loaded yet, Loading is fine here
+        viewModel.refresh() // second refresh: must not blank the already-loaded content
+
+        val captured = stateDuringSecondFetch as ClassesUiState.Loaded
+        assertEquals(1, captured.sections.size)
+    }
+
+    @Test
+    fun `channelSections fetches multiple sources concurrently rather than one at a time`() = runTest {
+        // Finding 5b: channelSections() used to fetch each configured source sequentially —
+        // 12 sources x (a ~1 MB page + a feed, each retried) is plausibly 20-40s of blank
+        // spinner on the bike's Wi-Fi. Simulates a slow network per source and asserts on wall
+        // clock: two 300ms feed fetches sequentially would take ~600ms+; concurrently, they
+        // finish in roughly one source's worth of time. The threshold is generous to avoid CI
+        // flakiness while still failing definitively against a sequential implementation.
+        sources.add(
+            ResolvedSource(ContentSourceType.PLAYLIST, "PLtheme000000001", "Themed Rides"),
+            ContentCategory.Workout,
+        )
+        val fetcher = FeedFetcher { url ->
+            when {
+                url.contains("feeds/videos.xml") -> {
+                    Thread.sleep(300)
+                    fixtureXml()
+                }
+                else -> fixtureXml() // not valid page HTML, so page fetch fails fast and cheap
+            }
+        }
+
+        val elapsedMs = kotlin.system.measureTimeMillis {
+            repository(fetcher).channelSections()
+        }
+
+        assertTrue("expected concurrent fetch to finish well under 600ms, took ${elapsedMs}ms", elapsedMs < 500)
+    }
+
+    @Test
     fun `refresh can be called again to reload`() = runTest {
         // Counts only feed fetches: the repository also probes the channel page on every
         // call, but that page fetch is retried (and this fixture isn't valid page HTML), so

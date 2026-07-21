@@ -63,19 +63,38 @@ class CreatorViewModel(
         }
     }
 
-    /** Fetches one playlist's videos. Safe to call for a playlist that isn't on this page. */
+    /**
+     * Fetches one playlist's videos. Safe to call for a playlist that isn't on this page.
+     *
+     * If the shelf scrolls out of the `LazyColumn` (or the rider navigates away and back to a
+     * retained view model) while [contentRepository.playlistVideos] is still suspended, the
+     * driving `LaunchedEffect` gets cancelled and the `updateRow` call below never runs — the
+     * row would stay `isLoading = true` forever, and the screen's `!row.isLoading` guard would
+     * then refuse to ever retry it. The `finally` clears the flag on that path too, without
+     * suppressing the cancellation itself (nothing here catches or swallows it — the `finally`
+     * block runs during the normal unwind and then the exception keeps propagating).
+     */
     suspend fun loadPlaylist(playlistId: String) {
         val loaded = _uiState.value as? CreatorUiState.Loaded ?: return
         val row = loaded.playlistRows.firstOrNull { it.playlist.id == playlistId } ?: return
 
         updateRow(playlistId) { it.copy(isLoading = true, loadFailed = false) }
-        val videos = contentRepository.playlistVideos(playlistId, row.playlist.title)
-        updateRow(playlistId) {
-            // An empty list means either the fetch failed or the playlist genuinely has no
-            // rideable classes (e.g. everything in it was under the minimum length). Both are
-            // treated as "couldn't load" on purpose: either way there's nothing to ride, and
-            // the shelf shows the same honest message rather than a misleading "empty" state.
-            it.copy(videos = videos, isLoading = false, loadFailed = videos.isEmpty())
+        try {
+            val videos = contentRepository.playlistVideos(playlistId, row.playlist.title)
+            updateRow(playlistId) {
+                // An empty list means either the fetch failed or the playlist genuinely has no
+                // rideable classes (e.g. everything in it was under the minimum length). Both
+                // are treated as "couldn't load" on purpose: either way there's nothing to
+                // ride, and the shelf shows the same honest message rather than a misleading
+                // "empty" state.
+                it.copy(videos = videos, isLoading = false, loadFailed = videos.isEmpty())
+            }
+        } finally {
+            // Only touch the flag if it's still set: a successful completion above has already
+            // turned it off, so this is a no-op on that path today — but clobbering a
+            // just-written successful result here would be a landmine the moment this code
+            // ever races with a second load of the same row.
+            updateRow(playlistId) { if (it.isLoading) it.copy(isLoading = false) else it }
         }
     }
 

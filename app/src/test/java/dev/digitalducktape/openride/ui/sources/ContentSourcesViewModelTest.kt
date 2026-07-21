@@ -53,6 +53,22 @@ class ContentSourcesViewModelTest {
     }
 
     @Test
+    fun `sources exposes the built-in catalog on a fresh database without Classes ever having run`() = runTest {
+        // Finding 2: seedIfEmpty used to be called only from
+        // YouTubeContentRepository.channelSections(), so a rider who opened this screen
+        // (Home -> Profile -> Content sources) before ever visiting the Classes tab saw an
+        // empty list on a fresh install. This constructs the view model straight from an empty
+        // database — nothing here touches YouTubeContentRepository or its channelSections() —
+        // so the only way this can see the 12 built-ins is if observing `sources` seeds them.
+        val freshViewModel = viewModel()
+
+        val sources = freshViewModel.sources.first()
+
+        assertEquals(12, sources.size)
+        assertTrue(sources.all { it.builtIn })
+    }
+
+    @Test
     fun `resolving a handle exposes the resolved source for confirmation`() = runTest {
         val viewModel = viewModel()
 
@@ -70,7 +86,10 @@ class ContentSourcesViewModelTest {
 
         viewModel.resolve("@kaleigh")
 
-        assertTrue(repository.observeAll().first().isEmpty())
+        // observeAll() now seeds the built-in catalog on its own (Finding 2), so an untouched
+        // database is no longer an empty list — the thing this test actually cares about is
+        // that resolving alone doesn't persist a *rider-added* source.
+        assertTrue(repository.observeAll().first().none { !it.builtIn })
     }
 
     @Test
@@ -93,7 +112,10 @@ class ContentSourcesViewModelTest {
 
         viewModel.confirmAdd(ContentCategory.Workout)
 
-        assertTrue(repository.observeAll().first().isEmpty())
+        // See the comment in `resolving does not add anything until confirmed` above: observing
+        // the built-in catalog is not "adding something," so this checks specifically for the
+        // absence of a rider-added row rather than an empty list.
+        assertTrue(repository.observeAll().first().none { !it.builtIn })
     }
 
     @Test
@@ -104,7 +126,7 @@ class ContentSourcesViewModelTest {
 
         val failed = viewModel.addState.value as AddSourceState.Failed
         assertEquals("No connection — try again", failed.message)
-        assertTrue(repository.observeAll().first().isEmpty())
+        assertTrue(repository.observeAll().first().none { !it.builtIn })
     }
 
     @Test
@@ -162,6 +184,25 @@ class ContentSourcesViewModelTest {
 
         viewModel.deleteCustom(added.id)
 
-        assertTrue(viewModel.sources.first().isEmpty())
+        assertTrue(viewModel.sources.first().none { it.id == added.id })
+    }
+
+    @Test
+    fun `deleting the only source re-seeds the built-in catalog instead of leaving it empty forever`() = runTest {
+        // Before Finding 2's fix, adding a custom source before the built-ins were ever seeded
+        // made seedIfEmpty's `count() > 0` guard true permanently — deleting that source left
+        // an empty catalog with no in-app way to recover the built-ins. Now that observing the
+        // list re-checks and re-seeds a genuinely empty database every time, this same sequence
+        // instead recovers the built-in catalog.
+        val viewModel = viewModel()
+        viewModel.resolve("@kaleigh")
+        viewModel.confirmAdd(ContentCategory.Workout)
+        val added = viewModel.sources.first().single()
+
+        viewModel.deleteCustom(added.id)
+
+        val afterDelete = viewModel.sources.first()
+        assertEquals(12, afterDelete.size)
+        assertTrue(afterDelete.all { it.builtIn })
     }
 }

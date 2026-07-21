@@ -112,9 +112,21 @@ class ClassesViewModel(
             }
         }
 
-    /** Fetches (or re-fetches) all configured channels. Safe to call repeatedly. */
+    /**
+     * Fetches (or re-fetches) all configured channels. Safe to call repeatedly — in particular,
+     * every time the rider returns to the Classes tab, since `ClassesScreen`'s
+     * `LaunchedEffect(Unit) { refresh() }` re-fires on every recomposition of that effect scope
+     * (tab re-entry, returning from a ride, etc.), not just the first.
+     *
+     * Only resets to [ClassesUiState.Loading] on a cold start — when nothing has loaded yet.
+     * Once something is loaded, a re-fetch keeps showing it while the new one is in flight
+     * rather than blanking the tab to a full-screen spinner on every single visit; the eventual
+     * [ClassesUiState.Loaded] write below still replaces it once the new fetch completes.
+     */
     suspend fun refresh() {
-        _uiState.value = ClassesUiState.Loading
+        if (_uiState.value !is ClassesUiState.Loaded) {
+            _uiState.value = ClassesUiState.Loading
+        }
         val sections = contentRepository.channelSections()
         _uiState.value = ClassesUiState.Loaded(
             sections = sections,

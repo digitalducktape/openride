@@ -3,6 +3,8 @@ package dev.digitalducktape.openride.core.content
 import android.content.Context
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
 
 /** Classes shorter than this aren't a meaningful ride, so they never reach the catalog. */
@@ -35,10 +37,22 @@ class YouTubeContentRepository(
     private val cache: ContentCache = ContentCache(context),
 ) {
 
-    /** One [ChannelSection] per visible configured source, in display order. */
+    /**
+     * One [ChannelSection] per visible configured source, in display order.
+     *
+     * Sources are fetched concurrently, not one at a time: each is a page fetch (~1 MB of
+     * HTML) plus a feed fetch, each retried once on failure, so a dozen configured sources
+     * fetched sequentially is plausibly 20-40s of blank spinner on the bike's Wi-Fi.
+     * `async`-ing each [fetchSection] call runs them in parallel on [Dispatchers.IO]'s thread
+     * pool while `.map { }.awaitAll()` still returns results in the same order the sources
+     * were requested in — i.e. the configured display order — regardless of which fetch
+     * happens to finish first.
+     */
     suspend fun channelSections(): List<ChannelSection> = withContext(Dispatchers.IO) {
         sourceRepository.seedIfEmpty()
-        sourceRepository.visibleOnce().map { source -> fetchSection(source) }
+        sourceRepository.visibleOnce()
+            .map { source -> async { fetchSection(source) } }
+            .awaitAll()
     }
 
     /** The creator page's payload, or `null` if [sourceId] isn't a configured source. */
@@ -74,26 +88,49 @@ class YouTubeContentRepository(
 
     private fun fetchSection(source: ContentSource): ChannelSection {
         val videos = fetchVideos(source.sourceType, source.youtubeId, source.displayName)
+        val cached = cache.read(source.youtubeId)
         return if (videos == null) {
             ChannelSection(
                 sourceId = source.id,
                 channelId = source.youtubeId,
                 channelName = source.displayName,
                 category = source.category,
-                videos = cache.read(source.youtubeId).orEmpty(),
+                videos = cached.orEmpty(),
                 refreshFailed = true,
             )
         } else {
             val filtered = rideable(videos)
-            cache.write(source.youtubeId, filtered)
-            ChannelSection(
-                sourceId = source.id,
-                channelId = source.youtubeId,
-                channelName = source.displayName,
-                category = source.category,
-                videos = filtered,
-                refreshFailed = false,
-            )
+            if (filtered.isEmpty() && !cached.isNullOrEmpty()) {
+                // A successful fetch that filters down to nothing is exactly as ambiguous as a
+                // markup change that silently broke parsing (Finding 1a): both present as "this
+                // source has zero rideable videos right now," and there is no way to tell them
+                // apart from here. Overwriting a known-good cache with an empty list on the
+                // strength of that ambiguity would destroy the offline fallback for good, so
+                // once something is already cached, keep showing it — even on the rare day a
+                // source genuinely posts nothing over ten minutes, one row quietly showing
+                // yesterday's classes for a cycle is a better rider experience than a row that
+                // goes blank. Not writing the cache here (rather than writing the stale list
+                // back unchanged) also keeps a later two-in-a-row "genuinely empty" fetch from
+                // ever looking any different from this one.
+                ChannelSection(
+                    sourceId = source.id,
+                    channelId = source.youtubeId,
+                    channelName = source.displayName,
+                    category = source.category,
+                    videos = cached,
+                    refreshFailed = true,
+                )
+            } else {
+                cache.write(source.youtubeId, filtered)
+                ChannelSection(
+                    sourceId = source.id,
+                    channelId = source.youtubeId,
+                    channelName = source.displayName,
+                    category = source.category,
+                    videos = filtered,
+                    refreshFailed = false,
+                )
+            }
         }
     }
 

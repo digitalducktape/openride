@@ -96,6 +96,28 @@ return 404/500 for valid URLs — observed alternating between 200 and 404 secon
 **Why:** it lets riders add their own channels and playlists and hide built-ins they don't
 ride. Built-ins are hideable but not deletable, so the original catalog is always recoverable.
 
+## Content Sources are not covered by backup/restore
+
+**Decision (2026-07-20):** `BackupSnapshot` (see `BackupRepository`) does not include the
+`content_sources` table — a rider's added channels/playlists and which built-ins they've
+hidden. Backup/restore covers only profiles, rides, and per-second samples, same as before this
+table existed.
+
+**Why:** extending the backup format (and bumping `BackupSnapshot.CURRENT_VERSION`) is a scope
+decision for the project owner, not something to fold in as a side effect of the Classes
+catalog work. This is recorded here rather than fixed so the gap is visible rather than silent.
+
+**Consequence:** after a reinstall + restore (or a restore from an older backup file), rides
+and profiles come back intact but any rider-added channels/playlists and hidden-built-in state
+are silently lost — the catalog resets to just the seeded built-ins. Nothing about the restore
+flow surfaces this today; a rider who customized their Content Sources would only discover it
+by noticing their additions are gone.
+
+**Revisit as:** a follow-up that adds `content_sources` rows to `BackupSnapshot` and bumps its
+version, with a matching restore path (careful with id stability the way rides/samples already
+are, and with what happens to a source's `builtIn` flag on restore into a build whose
+`ChannelConfig` seed list has since changed).
+
 ## Automatic local backup lives in shared Downloads, not app storage
 
 **Decision (2026-07-20):** alongside the manual Back Up button (P1-8), `AutoBackupManager`

@@ -22,7 +22,12 @@ import dev.digitalducktape.openride.core.ride.RideSessionManager
 import dev.digitalducktape.openride.core.ride.RideSessionState
 import java.io.IOException
 import java.io.InputStream
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -160,6 +165,46 @@ class CreatorViewModelTest {
         val row = (viewModel.uiState.value as CreatorUiState.Loaded).playlistRows.first()
         assertTrue(row.loadFailed)
         assertFalse(row.isLoading)
+    }
+
+    @Test
+    fun `cancelling a playlist load clears isLoading instead of leaving it stuck`() = runTest {
+        // Finding 4: if the shelf scrolls off-screen (or the rider navigates away and back to
+        // a retained view model) mid-fetch, the driving LaunchedEffect is cancelled and the
+        // final updateRow call in the old implementation never ran — the row stayed
+        // isLoading = true forever, and the screen's `!row.isLoading` guard then refused to
+        // ever retry it. This blocks the playlist page fetch on a real latch (a genuine
+        // suspension point inside contentRepository.playlistVideos' withContext(Dispatchers.IO))
+        // so the cancellation happens truly mid-flight, not after the fetch already finished.
+        val started = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val blockingFetcher = FeedFetcher { url ->
+            if (url.contains("playlist?list=") || url.contains("playlist_id=")) {
+                started.countDown()
+                release.await()
+            }
+            when {
+                url.contains("/playlists") -> readFixture("channel_playlists_page.html").byteInputStream()
+                url.contains("feeds/videos.xml") -> feedXml()
+                else -> readFixture("channel_videos_page.html").byteInputStream()
+            }
+        }
+        val (viewModel, _) = viewModel(backgroundScope, blockingFetcher)
+        viewModel.load()
+
+        val loaderScope = CoroutineScope(Job())
+        val job = loaderScope.launch { viewModel.loadPlaylist("PLtheme000000001") }
+        assertTrue(started.await(5, TimeUnit.SECONDS))
+        val duringLoad = (viewModel.uiState.value as CreatorUiState.Loaded).playlistRows.first()
+        assertTrue(duringLoad.isLoading)
+
+        job.cancel()
+        release.countDown()
+        job.join()
+
+        val afterCancel = (viewModel.uiState.value as CreatorUiState.Loaded).playlistRows.first()
+        assertFalse(afterCancel.isLoading)
+        loaderScope.cancel()
     }
 
     @Test

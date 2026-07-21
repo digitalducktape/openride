@@ -23,10 +23,27 @@ class ContentParseException(message: String) : Exception(message)
  */
 class YouTubePageParser(private val nowEpochMs: () -> Long = System::currentTimeMillis) {
 
-    fun parseVideos(html: String, channelName: String): List<Video> =
-        findLockups(html)
+    /**
+     * Throws [ContentParseException] rather than returning an empty list when zero video
+     * lockups are found. A page we can parse as JSON but that has no video tiles at all is
+     * indistinguishable from a page whose markup shape changed underneath [findLockups] (the
+     * `lockupViewModel` key it looks for is itself a recent rename of `gridVideoRenderer`, so
+     * this will happen again) — both look identical from here. Treating "found nothing" as
+     * unreadable, same as malformed JSON, routes it through the repository's existing
+     * failed-fetch handling (degrade to feed/cache) instead of a "successful" fetch that
+     * quietly reports an empty catalog and overwrites the on-disk cache with nothing. Contrast
+     * with [parsePlaylists] below, which must NOT do this: a creator legitimately having zero
+     * playlists is common and correct, not a signal anything broke.
+     */
+    fun parseVideos(html: String, channelName: String): List<Video> {
+        val videos = findLockups(html)
             .filter { it.optString(KEY_CONTENT_TYPE) == TYPE_VIDEO }
             .mapNotNull { lockup -> toVideo(lockup, channelName) }
+        if (videos.isEmpty()) {
+            throw ContentParseException("no video lockups found on page")
+        }
+        return videos
+    }
 
     fun parsePlaylists(html: String): List<PlaylistSummary> =
         findLockups(html)
@@ -128,13 +145,23 @@ class YouTubePageParser(private val nowEpochMs: () -> Long = System::currentTime
         return lockups
     }
 
-    private fun collectLockups(node: Any?, into: MutableList<JSONObject>) {
+    /**
+     * @param depth how many levels deep [node] is. [MAX_DEPTH] is far past anything a real
+     *   YouTube page nests (a few dozen levels at most), so hitting it means pathological or
+     *   adversarial input, not a legitimate page shape. Stopping there — rather than recursing
+     *   unbounded — keeps this a "no lockups found" result (a clean [ContentParseException] via
+     *   [parseVideos], same as any other unreadable page) instead of a [StackOverflowError],
+     *   which is an [Error] rather than an [Exception] and would sail straight past every catch
+     *   clause in the content layer and crash the Classes tab instead of degrading.
+     */
+    private fun collectLockups(node: Any?, into: MutableList<JSONObject>, depth: Int = 0) {
+        if (depth > MAX_DEPTH) return
         when (node) {
             is JSONObject -> {
                 node.optJSONObject(KEY_LOCKUP_VM)?.let { into.add(it) }
-                node.keys().forEach { key -> collectLockups(node.opt(key), into) }
+                node.keys().forEach { key -> collectLockups(node.opt(key), into, depth + 1) }
             }
-            is JSONArray -> (0 until node.length()).forEach { collectLockups(node.opt(it), into) }
+            is JSONArray -> (0 until node.length()).forEach { collectLockups(node.opt(it), into, depth + 1) }
         }
     }
 
@@ -180,6 +207,8 @@ class YouTubePageParser(private val nowEpochMs: () -> Long = System::currentTime
         "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
 
     private companion object {
+        /** See [collectLockups]'s KDoc for why this exists and why 200 is safely past real pages. */
+        const val MAX_DEPTH = 200
         val MARKERS = listOf("var ytInitialData = ", "window[\"ytInitialData\"] = ")
         const val TYPE_VIDEO = "LOCKUP_CONTENT_TYPE_VIDEO"
         const val TYPE_PLAYLIST = "LOCKUP_CONTENT_TYPE_PLAYLIST"
