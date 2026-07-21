@@ -19,8 +19,9 @@ const val MIN_CLASS_DURATION_SEC = 600
  *
  * Why two sources rather than one:
  * - The **page** ([YouTubePageParser]) is the only key-free source of *duration* and the only
- *   listing that excludes members-only videos, so both catalog filters depend on it. It also
- *   carries roughly twice as many videos as the feed.
+ *   listing that carries the members-only signal (a per-tile badge the feed has no equivalent
+ *   of), so both catalog filters depend on it. It also carries roughly twice as many videos
+ *   as the feed.
  * - The **feed** ([AtomFeedParser]) is the only source of exact publish timestamps (the page
  *   only says "4 months ago"), and it still works if YouTube changes its page internals.
  *
@@ -148,8 +149,11 @@ class YouTubeContentRepository(
         }
 
         return when {
-            // Page listing is authoritative: it's public-only, so an id the feed knows about
-            // that the page doesn't is a members-only video and must not appear.
+            // Page listing is authoritative: [YouTubePageParser] has already dropped its
+            // members-only tiles, so an id the feed knows about that the parsed page doesn't is
+            // either members-only or too new to matter, and must not be unioned back in. (The
+            // feed itself has no members-only marker — see feedVideos below for why the
+            // page-failed fallback can't filter, only degrade.)
             pageVideos != null -> {
                 val publishedById = feedVideos.orEmpty().associate { it.id to it.publishedEpochMs }
                 pageVideos.map { video ->
