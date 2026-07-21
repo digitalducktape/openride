@@ -6,7 +6,7 @@ package dev.digitalducktape.openride.core.content
  *
  * A configured channel is a whole creator, not a spin-only feed: a fitness creator posts spin
  * classes alongside strength classes, vlogs, and personal videos, and the duration + members
- * filters can't tell them apart. The [content catalog expansion][1] originally called title
+ * filters can't tell them apart. The content catalog expansion originally called title
  * keyword filtering a non-goal ("would drop valid classes"); real mixed-content channels
  * reversed that, and this is the agreed mitigation.
  *
@@ -21,8 +21,6 @@ package dev.digitalducktape.openride.core.content
  * Terms match case-insensitively and on word boundaries, so "ride" doesn't fire on "bride" or
  * "stride". The two term lists are the intended tuning knobs; adjust them from real misses
  * rather than reworking the shape.
- *
- * [1]: docs/superpowers/specs/2026-07-19-content-catalog-expansion-design.md
  */
 object ClassRelevance {
 

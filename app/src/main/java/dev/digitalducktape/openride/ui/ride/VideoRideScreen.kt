@@ -52,7 +52,7 @@ import kotlinx.coroutines.launch
  *
  * The overlay is dismissible (tap the video, or bring it back via the "Metrics" pill) so
  * YouTube's native player controls are always reachable and never permanently covered —
- * part of the ToS stance recorded in docs/DECISIONS.md.
+ * part of the app's deliberate YouTube ToS stance.
  *
  * Ride state comes from the same [InRideViewModel] as the plain in-ride screen, and the
  * video tracks it: pausing the ride (Pause button or freewheel auto-pause) pauses the video

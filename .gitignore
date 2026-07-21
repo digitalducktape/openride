@@ -10,3 +10,8 @@ captures/
 *.apk
 *.aab
 *.keystore
+
+# Internal planning docs — kept local, not published
+docs/PRD.md
+docs/DECISIONS.md
+docs/superpowers/

@@ -17,7 +17,7 @@ class YouTubeEmbedTest {
     fun `html keeps YouTube's own controls enabled and plays inline`() {
         val html = YouTubeEmbed.html("dQw4w9WgXcQ")
 
-        // ToS stance (spec / DECISIONS.md): never strip YouTube's player UI…
+        // YouTube ToS stance: never strip YouTube's player UI…
         assertTrue(html.contains("\"controls\": 1"))
         // …and play inside our layout rather than forcing the fullscreen activity.
         assertTrue(html.contains("\"playsinline\": 1"))

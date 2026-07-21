@@ -1,0 +1,15 @@
+OpenRide
+Copyright 2026 The OpenRide Authors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+OpenRide is an independent, non-commercial project. It is not affiliated with,
+authorized, sponsored, or endorsed by Peloton Interactive, Inc. "Peloton" and
+"Peloton Bike" are trademarks of Peloton Interactive, Inc., used here only
+descriptively to identify the hardware OpenRide interoperates with (nominative
+fair use). OpenRide contains no Peloton source code, artwork, branding, audio,
+video, or class content.
+
+For the reverse-engineering / interoperability basis of the on-device sensor
+integration, see docs/INTEROP.md. For third-party attributions and dependency
+licenses, see THIRD_PARTY_NOTICES.md.

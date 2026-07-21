@@ -18,8 +18,8 @@ import kotlinx.serialization.json.Json
  *
  * **Not actually whole-database:** the `content_sources` table (a rider's added channels and
  * playlists, plus which built-ins they've hidden) is deliberately excluded from
- * [BackupSnapshot]. See `docs/DECISIONS.md` ("Content Sources are not covered by
- * backup/restore") for why and the consequence: after a reinstall + restore, rides and
+ * [BackupSnapshot]. This is a deliberate design decision; the consequence: after a
+ * reinstall + restore, rides and
  * profiles come back but any rider-added channels/playlists and hidden-state are silently
  * gone, reset to just the seeded built-in catalog.
  *

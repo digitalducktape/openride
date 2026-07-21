@@ -1,8 +1,8 @@
 package dev.digitalducktape.openride.ui.classes
 
 /**
- * Builds the host page for the in-app class player (v2 spec, superseding the T10 intent
- * handoff — see docs/DECISIONS.md): a full-viewport YouTube embed on the privacy-enhanced
+ * Builds the host page for the in-app class player (superseding the earlier intent-based
+ * handoff): a full-viewport YouTube embed on the privacy-enhanced
  * `youtube-nocookie.com` domain, driven through YouTube's official IFrame Player API so the
  * app can keep the video in step with the ride:
  *

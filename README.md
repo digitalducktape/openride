@@ -67,6 +67,23 @@ The rest of this section is technical detail for anyone contributing to the code
 - Room database: `Profile` / `Ride` / `RideSample` (per-second samples — required for FIT/TCX export)
 - Content browser fetches per-channel YouTube RSS (`/feeds/videos.xml?channel_id=…`) on-device: no API key, no quota, no backend
 
-## Personal project
+## License
 
-Built for one household's bike. Not affiliated with Peloton. No Peloton assets, content, or branding are used; UI similarity is limited to layout and interaction patterns.
+OpenRide is released under the [Apache License 2.0](LICENSE). Attributions for
+prior community work and bundled dependencies are in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+## Independent project — not affiliated with Peloton
+
+OpenRide is an independent, non-commercial project. It is **not affiliated with,
+authorized, sponsored, or endorsed by Peloton Interactive, Inc.** "Peloton" and
+"Peloton Bike" are trademarks of their owner, used here only to describe the
+hardware OpenRide runs on.
+
+OpenRide ships **no Peloton source code, artwork, branding, audio, video, or
+class content**. It reads the bike's own sensor values through an existing,
+unprotected on-device service (no root, no firmware modification) purely for
+interoperability, and streams third-party workout videos through YouTube's
+official player. Any UI resemblance is limited to common layout and interaction
+patterns. For the reverse-engineering and trademark basis, see
+[docs/INTEROP.md](docs/INTEROP.md).

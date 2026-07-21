@@ -112,8 +112,8 @@ To fully back out of everything above, roughly in reverse order:
 3. Re-enable/reinstall whatever OpenPelo disabled or removed (stock launcher, "Device
    Management" app) per OpenPelo's own restore instructions.
 4. Re-allow OTA updates if you'd disabled them, understanding that doing so re-introduces the
-   risk in the Risks & Mitigations section of `docs/PRD.md` (an update could break the P0-2
-   sensor access this whole project depends on).
+   risk that a firmware update could change or remove the on-device sensor service this app
+   depends on.
 
 Reverting network-level OTA blocks and any OpenPelo-side launcher/app removal is outside this
 app's scope — those are OpenPelo setup steps, not something OpenRide's own APK controls.
