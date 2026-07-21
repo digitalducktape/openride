@@ -53,6 +53,14 @@ class YouTubePageParser(private val nowEpochMs: () -> Long = System::currentTime
     private fun toVideo(lockup: JSONObject, channelName: String): Video? {
         val id = lockup.optString(KEY_CONTENT_ID).takeIf { it.isNotEmpty() } ?: return null
         val metadata = lockup.optJSONObject(KEY_METADATA)?.optJSONObject(KEY_METADATA_VM)
+        // Members-only videos appear here exactly like public ones — same lockup shape, a real
+        // duration badge — so nothing above filters them out. They're unplayable without a paid
+        // channel membership, so letting one into the catalog strands the rider on YouTube's
+        // "Join this channel" wall the moment they start it. Their one distinguishing mark is a
+        // BADGE_MEMBERS_ONLY badge in the metadata rows; drop the tile when it's present. This is
+        // the "no members-only classes" rule (see the class KDoc) — the page is the only source
+        // that carries the signal, so it has to happen right here.
+        if (isMembersOnly(metadata)) return null
         val title = metadata?.optJSONObject(KEY_TITLE)?.optString(KEY_CONTENT)
             ?.takeIf { it.isNotEmpty() } ?: return null
         val thumbnail = lockup.optJSONObject(KEY_CONTENT_IMAGE)?.optJSONObject(KEY_THUMBNAIL_VM)
@@ -90,6 +98,24 @@ class YouTubePageParser(private val nowEpochMs: () -> Long = System::currentTime
     /** `"4 videos"` → 4. */
     private fun parseVideoCount(text: String): Int? =
         Regex("""^(\d+)\s+video""").find(text.trim().lowercase())?.groupValues?.get(1)?.toIntOrNull()
+
+    /**
+     * True when this tile's metadata rows carry a [STYLE_MEMBERS_ONLY] badge. Matches on the
+     * badge *style* rather than its `"Members only"` text because the text is localized (a
+     * German channel says `"Nur für Mitglieder"`) while the style enum is stable across
+     * locales.
+     */
+    private fun isMembersOnly(metadata: JSONObject?): Boolean {
+        val rows = metadata?.optJSONObject(KEY_METADATA)
+            ?.optJSONObject(KEY_CONTENT_METADATA_VM)
+            ?.optJSONArray(KEY_METADATA_ROWS)
+            ?: return false
+        return rows.objects().any { row ->
+            row.optJSONArray(KEY_BADGES).orEmptyArray().objects().any { badge ->
+                badge.optJSONObject(KEY_BADGE_VIEW_MODEL)?.optString(KEY_BADGE_STYLE) == STYLE_MEMBERS_ONLY
+            }
+        }
+    }
 
     private fun publishedEpochMs(metadata: JSONObject?): Long {
         val rows = metadata?.optJSONObject(KEY_METADATA)
@@ -228,6 +254,9 @@ class YouTubePageParser(private val nowEpochMs: () -> Long = System::currentTime
         const val KEY_THUMBNAIL_BADGES = "thumbnailBadges"
         const val KEY_BADGES = "badges"
         const val KEY_BADGE_VM = "thumbnailBadgeViewModel"
+        const val KEY_BADGE_VIEW_MODEL = "badgeViewModel"
+        const val KEY_BADGE_STYLE = "badgeStyle"
+        const val STYLE_MEMBERS_ONLY = "BADGE_MEMBERS_ONLY"
         const val KEY_TEXT_FIELD = "text"
         const val KEY_METADATA = "metadata"
         const val KEY_METADATA_VM = "lockupMetadataViewModel"

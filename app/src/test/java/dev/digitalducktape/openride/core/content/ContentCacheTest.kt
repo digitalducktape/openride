@@ -46,6 +46,16 @@ class ContentCacheTest {
     }
 
     @Test
+    fun `write then read preserves the non-startable flag`() {
+        val feedOnly = sampleVideo("feedOnly").copy(startable = false)
+
+        cache.write("channel-startable", listOf(feedOnly))
+        val read = cache.read("channel-startable")
+
+        assertEquals(listOf(false), read?.map { it.startable })
+    }
+
+    @Test
     fun `writing again for the same channel overwrites the previous cache`() {
         cache.write("channel-2", listOf(sampleVideo("first")))
         cache.write("channel-2", listOf(sampleVideo("second")))
