@@ -119,10 +119,10 @@ fun OpenRideNavHost(appContainer: AppContainer) {
             val viewModel: UpdateViewModel = viewModel(
                 factory = viewModelFactory {
                     UpdateViewModel(
-                        appContainer.updateSettings,
                         appContainer.updateRepository,
                         currentVersionCode = BuildConfig.VERSION_CODE,
                         currentVersionName = BuildConfig.VERSION_NAME,
+                        assetInfix = BuildConfig.UPDATE_APK_ASSET_INFIX,
                     )
                 },
             )

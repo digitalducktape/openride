@@ -1,18 +1,18 @@
 package dev.digitalducktape.openride.ui.update
 
 import androidx.lifecycle.ViewModel
+import dev.digitalducktape.openride.core.update.AvailableUpdate
 import dev.digitalducktape.openride.core.update.UpdateCheckResult
-import dev.digitalducktape.openride.core.update.UpdateManifest
 import dev.digitalducktape.openride.core.update.UpdateRepository
-import dev.digitalducktape.openride.core.update.UpdateSettings
 import java.io.File
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * Drives the opt-in self-updater screen (PRD #22/T22): configure a manifest URL, check it
- * against the installed build, download the APK, and hand it to the system installer.
+ * Drives the self-updater screen (PRD #22/T22): check the latest GitHub release against the
+ * installed build, download the APK, and hand it to the system installer. There is no URL to
+ * configure — the release source is fixed and the check hits GitHub directly.
  *
  * The check → download → install steps are separate `suspend` functions, each triggered by its
  * own explicit user tap (the screen calls them from a `rememberCoroutineScope`, matching
@@ -21,18 +21,16 @@ import kotlinx.coroutines.flow.asStateFlow
  * "no auto-install without user tap" guarantee.
  */
 class UpdateViewModel(
-    private val updateSettings: UpdateSettings,
     private val updateRepository: UpdateRepository,
     private val currentVersionCode: Int,
     private val currentVersionName: String,
+    private val assetInfix: String,
 ) : ViewModel() {
 
     data class UiState(
-        val manifestUrl: String? = null,
-        val urlDraft: String = "",
         val isBusy: Boolean = false,
         val status: String? = null,
-        val available: UpdateManifest? = null,
+        val available: AvailableUpdate? = null,
         val downloadedApk: File? = null,
         val currentVersionName: String = "",
         val currentVersionCode: Int = 0,
@@ -40,52 +38,21 @@ class UpdateViewModel(
 
     private val _uiState = MutableStateFlow(
         UiState(
-            manifestUrl = updateSettings.manifestUrl.value,
-            urlDraft = updateSettings.manifestUrl.value.orEmpty(),
             currentVersionName = currentVersionName,
             currentVersionCode = currentVersionCode,
         ),
     )
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
-    fun onUrlDraftChange(value: String) {
-        _uiState.value = _uiState.value.copy(urlDraft = value)
-    }
-
-    /** Persists the typed URL, enabling the updater. Clears any prior check result. */
-    fun saveUrl() {
-        val draft = _uiState.value.urlDraft
-        updateSettings.setManifestUrl(draft)
-        _uiState.value = _uiState.value.copy(
-            manifestUrl = updateSettings.manifestUrl.value,
-            status = null,
-            available = null,
-            downloadedApk = null,
-        )
-    }
-
-    /** Clears the configured URL, disabling the updater entirely. */
-    fun clearUrl() {
-        updateSettings.setManifestUrl(null)
-        _uiState.value = _uiState.value.copy(
-            manifestUrl = null,
-            urlDraft = "",
-            status = null,
-            available = null,
-            downloadedApk = null,
-        )
-    }
-
-    /** Fetches and evaluates the manifest. No-op if no URL is configured. */
+    /** Fetches the latest release and evaluates it against the installed build. */
     suspend fun checkForUpdate() {
-        val url = _uiState.value.manifestUrl ?: return
         _uiState.value = _uiState.value.copy(isBusy = true, status = "Checking…", available = null, downloadedApk = null)
 
-        when (val result = updateRepository.check(url, currentVersionCode)) {
+        when (val result = updateRepository.check(currentVersionCode, assetInfix)) {
             is UpdateCheckResult.Available -> _uiState.value = _uiState.value.copy(
                 isBusy = false,
-                available = result.manifest,
-                status = "Version ${result.manifest.versionName} is available",
+                available = result.update,
+                status = "Version ${result.update.versionName} is available",
             )
             is UpdateCheckResult.UpToDate -> _uiState.value = _uiState.value.copy(
                 isBusy = false,
@@ -102,10 +69,10 @@ class UpdateViewModel(
 
     /** Downloads the available APK. Does *not* install it — see [installIntent]. */
     suspend fun downloadUpdate() {
-        val manifest = _uiState.value.available ?: return
+        val update = _uiState.value.available ?: return
         _uiState.value = _uiState.value.copy(isBusy = true, status = "Downloading…")
 
-        val file = updateRepository.downloadApk(manifest)
+        val file = updateRepository.downloadApk(update)
         _uiState.value = if (file == null) {
             _uiState.value.copy(isBusy = false, status = "Download failed", downloadedApk = null)
         } else {

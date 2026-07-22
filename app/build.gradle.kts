@@ -14,8 +14,8 @@ android {
         applicationId = "dev.digitalducktape.openride"
         minSdk = 30
         targetSdk = 34
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -23,6 +23,12 @@ android {
         // Gen 2 sensor binding in AppContainer. Defaults to false (Mock) — flip only when
         // building for the actual bike tablet, see PelotonBikeDataSource's TODOs.
         buildConfigField("boolean", "USE_REAL_BIKE_SENSOR", "false")
+
+        // T22 / #22: which release APK asset this build updates itself from. The self-updater
+        // matches `openride-<infix>-<versionCode>.apk` in the latest GitHub release, so a mock
+        // dev build never offers to install the real bike APK over itself. Only the `real`
+        // asset is published, so the mock build simply finds nothing and stays quiet.
+        buildConfigField("String", "UPDATE_APK_ASSET_INFIX", "\"mock\"")
     }
 
     buildTypes {
@@ -44,6 +50,8 @@ android {
             applicationIdSuffix = ".real"
             versionNameSuffix = "-real"
             buildConfigField("boolean", "USE_REAL_BIKE_SENSOR", "true")
+            // This is the build published to the bike, so it updates from the `real` asset.
+            buildConfigField("String", "UPDATE_APK_ASSET_INFIX", "\"real\"")
             matchingFallbacks += "debug"
         }
     }

@@ -10,7 +10,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * Fetches the update manifest, downloads the APK, and builds the install intent (PRD #22/T22).
+ * Fetches the latest GitHub release, downloads its APK, and builds the install intent (PRD #22/T22).
  *
  * **Nothing here installs anything.** [downloadApk] only writes a file into the app's own cache;
  * handing it to the system package installer is a separate, explicitly user-tapped step
@@ -27,27 +27,30 @@ class UpdateRepository(
     private val checker: UpdateChecker = UpdateChecker(),
 ) {
 
-    /** Fetches [manifestUrl] and evaluates it against [currentVersionCode]. Never throws. */
-    suspend fun check(manifestUrl: String, currentVersionCode: Int): UpdateCheckResult =
+    /**
+     * Fetches the latest GitHub release and evaluates it against [currentVersionCode] for this
+     * build's [assetInfix] (`real`/`mock`). Never throws — a network failure is a [UpdateCheckResult.Failed].
+     */
+    suspend fun check(currentVersionCode: Int, assetInfix: String): UpdateCheckResult =
         withContext(Dispatchers.IO) {
             val body = try {
-                fetcher.fetch(manifestUrl).use { it.bufferedReader().readText() }
+                fetcher.fetch(LATEST_RELEASE_URL).use { it.bufferedReader().readText() }
             } catch (e: Exception) {
-                return@withContext UpdateCheckResult.Failed("Couldn't reach the update URL")
+                return@withContext UpdateCheckResult.Failed("Couldn't reach GitHub releases")
             }
-            checker.evaluate(currentVersionCode, body)
+            checker.evaluate(currentVersionCode, assetInfix, body)
         }
 
     /**
-     * Downloads [manifest]'s APK into the app's cache and returns the file, or `null` if the
+     * Downloads [update]'s APK into the app's cache and returns the file, or `null` if the
      * download failed. A partial download is deleted rather than left behind for the installer
      * to choke on.
      */
-    suspend fun downloadApk(manifest: UpdateManifest): File? = withContext(Dispatchers.IO) {
+    suspend fun downloadApk(update: AvailableUpdate): File? = withContext(Dispatchers.IO) {
         val dir = File(context.cacheDir, UPDATES_DIR).apply { mkdirs() }
-        val target = File(dir, "openride-${manifest.versionCode}.apk")
+        val target = File(dir, "openride-${update.versionCode}.apk")
         try {
-            fetcher.fetch(manifest.apkUrl).use { input ->
+            fetcher.fetch(update.apkUrl).use { input ->
                 target.outputStream().use { output -> input.copyTo(output) }
             }
             target
@@ -73,5 +76,9 @@ class UpdateRepository(
     private companion object {
         const val UPDATES_DIR = "updates"
         const val APK_MIME_TYPE = "application/vnd.android.package-archive"
+
+        /** The public repo's latest-release endpoint. Unauthenticated — the repo must stay public. */
+        const val LATEST_RELEASE_URL =
+            "https://api.github.com/repos/digitalducktape/openride/releases/latest"
     }
 }

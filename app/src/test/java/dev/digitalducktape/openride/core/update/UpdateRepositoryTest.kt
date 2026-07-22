@@ -19,9 +19,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Fetch/download behaviour of the self-updater (PRD #22/T22) against a fake [FeedFetcher] — no
- * network. Robolectric supplies the [Context] the repository needs for its cache dir and the
- * FileProvider-backed install intent.
+ * Fetch/download behaviour of the GitHub-native self-updater (PRD #22/T22) against a fake
+ * [FeedFetcher] — no network. Robolectric supplies the [Context] the repository needs for its
+ * cache dir and the FileProvider-backed install intent.
  */
 @RunWith(AndroidJUnit4::class)
 class UpdateRepositoryTest {
@@ -44,10 +44,11 @@ class UpdateRepositoryTest {
         }
     }
 
-    private val manifestUrl = "https://example.com/update.json"
-    private val apkUrl = "https://example.com/openride.apk"
-    private val manifestBody =
-        """{"versionCode":7,"versionName":"0.7.0","apkUrl":"$apkUrl","notes":"New"}"""
+    // The repository's hardcoded endpoint (kept in sync with UpdateRepository.LATEST_RELEASE_URL).
+    private val latestReleaseUrl = "https://api.github.com/repos/digitalducktape/openride/releases/latest"
+    private val apkUrl = "https://github.com/digitalducktape/openride/releases/download/v0.7.0/openride-real-7.apk"
+    private val releaseBody =
+        """{"tag_name":"v0.7.0","body":"New","assets":[{"name":"openride-real-7.apk","browser_download_url":"$apkUrl"}]}"""
 
     @Before
     fun setUp() {
@@ -56,44 +57,44 @@ class UpdateRepositoryTest {
     }
 
     @Test
-    fun `check reports an available update from a fetched manifest`() = runTest {
-        val fetcher = FakeFetcher().apply { respond(manifestUrl, manifestBody) }
+    fun `check reports an available update from the latest release`() = runTest {
+        val fetcher = FakeFetcher().apply { respond(latestReleaseUrl, releaseBody) }
         val repository = UpdateRepository(context, fetcher)
 
-        val result = repository.check(manifestUrl, currentVersionCode = 1)
+        val result = repository.check(currentVersionCode = 1, assetInfix = "real")
 
         assertTrue(result is UpdateCheckResult.Available)
-        assertEquals(7, (result as UpdateCheckResult.Available).manifest.versionCode)
-        assertEquals(listOf(manifestUrl), fetcher.requested)
+        assertEquals(7, (result as UpdateCheckResult.Available).update.versionCode)
+        assertEquals(listOf(latestReleaseUrl), fetcher.requested)
     }
 
     @Test
     fun `check reports up to date when the installed build is current`() = runTest {
-        val fetcher = FakeFetcher().apply { respond(manifestUrl, manifestBody) }
+        val fetcher = FakeFetcher().apply { respond(latestReleaseUrl, releaseBody) }
         val repository = UpdateRepository(context, fetcher)
 
-        val result = repository.check(manifestUrl, currentVersionCode = 7)
+        val result = repository.check(currentVersionCode = 7, assetInfix = "real")
 
         assertEquals(UpdateCheckResult.UpToDate(7), result)
     }
 
     @Test
-    fun `check fails gracefully when the URL can't be reached`() = runTest {
+    fun `check fails gracefully when GitHub can't be reached`() = runTest {
         val fetcher = FakeFetcher(failWith = IOException("no network"))
         val repository = UpdateRepository(context, fetcher)
 
-        val result = repository.check(manifestUrl, currentVersionCode = 1)
+        val result = repository.check(currentVersionCode = 1, assetInfix = "real")
 
-        assertEquals(UpdateCheckResult.Failed("Couldn't reach the update URL"), result)
+        assertEquals(UpdateCheckResult.Failed("Couldn't reach GitHub releases"), result)
     }
 
     @Test
     fun `downloadApk writes the APK into the app's own cache`() = runTest {
         val fetcher = FakeFetcher().apply { respond(apkUrl, "APK-BYTES") }
         val repository = UpdateRepository(context, fetcher)
-        val manifest = UpdateManifest(versionCode = 7, versionName = "0.7.0", apkUrl = apkUrl)
+        val update = AvailableUpdate(versionCode = 7, versionName = "0.7.0", apkUrl = apkUrl)
 
-        val file = repository.downloadApk(manifest)
+        val file = repository.downloadApk(update)
 
         assertNotNull(file)
         assertTrue(file!!.exists())
@@ -107,9 +108,9 @@ class UpdateRepositoryTest {
     fun `a failed download returns null and leaves no partial file behind`() = runTest {
         val fetcher = FakeFetcher(failWith = IOException("connection reset"))
         val repository = UpdateRepository(context, fetcher)
-        val manifest = UpdateManifest(versionCode = 7, versionName = "0.7.0", apkUrl = apkUrl)
+        val update = AvailableUpdate(versionCode = 7, versionName = "0.7.0", apkUrl = apkUrl)
 
-        val file = repository.downloadApk(manifest)
+        val file = repository.downloadApk(update)
 
         assertNull(file)
         assertFalse(File(File(context.cacheDir, "updates"), "openride-7.apk").exists())
@@ -119,8 +120,8 @@ class UpdateRepositoryTest {
     fun `installIntentFor targets the package installer and grants read access`() = runTest {
         val fetcher = FakeFetcher().apply { respond(apkUrl, "APK-BYTES") }
         val repository = UpdateRepository(context, fetcher)
-        val manifest = UpdateManifest(versionCode = 7, versionName = "0.7.0", apkUrl = apkUrl)
-        val file = repository.downloadApk(manifest)!!
+        val update = AvailableUpdate(versionCode = 7, versionName = "0.7.0", apkUrl = apkUrl)
+        val file = repository.downloadApk(update)!!
 
         val intent = repository.installIntentFor(file)
 

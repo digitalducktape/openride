@@ -4,12 +4,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -23,9 +21,9 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
 /**
- * Opt-in self-updater (PRD #22/T22): point OpenRide at a JSON manifest URL, check it, download
- * the APK, and hand it to the system installer — so updating the bike's tablet doesn't require
- * re-running ADB.
+ * Self-updater (PRD #22/T22): check the latest GitHub release, download the APK, and hand it to
+ * the system installer — so updating the bike's tablet doesn't require re-running ADB. OpenRide
+ * also checks on launch and surfaces a banner on Home; this screen is the manual entry point.
  *
  * Each step is a separate explicit tap (Check → Download → Install); nothing chains on its own,
  * and the final install is the platform installer's own confirmation UI.
@@ -55,41 +53,19 @@ fun UpdateScreen(
                 modifier = Modifier.padding(top = 8.dp),
             )
             Text(
-                text = "Optional. With no URL set, OpenRide never checks for updates.",
+                text = "OpenRide checks GitHub for the latest release.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp),
             )
 
-            OutlinedTextField(
-                value = uiState.urlDraft,
-                onValueChange = viewModel::onUrlDraftChange,
-                label = { Text("Update manifest URL (https)") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
-            )
-
             Row(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.padding(top = 12.dp),
+                modifier = Modifier.padding(top = 16.dp),
             ) {
-                OutlinedButton(
-                    onClick = { viewModel.saveUrl() },
-                    enabled = !uiState.isBusy,
-                ) {
-                    Text("Save URL")
-                }
-                if (uiState.manifestUrl != null) {
-                    OutlinedButton(
-                        onClick = { viewModel.clearUrl() },
-                        enabled = !uiState.isBusy,
-                    ) {
-                        Text("Clear")
-                    }
-                }
                 Button(
                     onClick = { scope.launch { viewModel.checkForUpdate() } },
-                    enabled = uiState.manifestUrl != null && !uiState.isBusy,
+                    enabled = !uiState.isBusy,
                 ) {
                     Text("Check for updates")
                 }

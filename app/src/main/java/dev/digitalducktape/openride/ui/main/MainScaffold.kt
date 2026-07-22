@@ -18,6 +18,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -98,10 +99,15 @@ fun MainScaffold(
                         )
                     },
                 )
+                val availableUpdate by appContainer.updateAvailability.collectAsState()
+                val bannerDismissed by appContainer.updateBannerDismissed.collectAsState()
                 HomeScreen(
                     viewModel = viewModel,
                     onQuickStart = { outerNavController.navigate(Destinations.InRide) },
                     onOpenProfile = { navigateToTab(MainTabs.Profile) },
+                    updateVersionName = availableUpdate?.versionName?.takeUnless { bannerDismissed },
+                    onOpenUpdate = { outerNavController.navigate(Destinations.AppUpdate) },
+                    onDismissUpdate = { appContainer.dismissUpdateBanner() },
                 )
             }
             composable(MainTabs.Classes) {

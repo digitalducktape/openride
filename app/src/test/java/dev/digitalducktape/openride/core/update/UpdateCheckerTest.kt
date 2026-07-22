@@ -5,76 +5,104 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Version comparison + manifest validation for the opt-in self-updater (PRD #22/T22). Pure JVM:
- * [UpdateChecker] does no I/O.
+ * Version comparison + asset selection for the GitHub-native self-updater (PRD #22/T22). Pure
+ * JVM: [UpdateChecker] does no I/O — it takes the `/releases/latest` JSON and the installed
+ * version and decides whether the release is newer.
+ *
+ * The authoritative version is the trailing integer in the APK asset filename
+ * (`openride-<infix>-<versionCode>.apk`); the release tag/body are only for display.
  */
 class UpdateCheckerTest {
 
     private val checker = UpdateChecker()
 
-    private fun manifestJson(
+    /** A `/releases/latest` payload carrying one bike (`real`) asset. */
+    private fun releaseJson(
         versionCode: Int = 2,
-        versionName: String = "0.2.0",
-        apkUrl: String = "https://example.com/openride.apk",
-        notes: String? = "Adds routes",
+        tag: String = "v0.2.0",
+        body: String? = "Adds routes",
+        infix: String = "real",
+        apkUrl: String = "https://github.com/o/r/releases/download/v0.2.0/openride-$infix-$versionCode.apk",
     ): String = buildString {
-        append("""{"versionCode":$versionCode,"versionName":"$versionName","apkUrl":"$apkUrl"""")
-        if (notes != null) append(""","notes":"$notes"""")
-        append("}")
+        append("""{"tag_name":"$tag","name":"OpenRide 0.2.0"""")
+        if (body != null) append(""","body":"$body"""")
+        append(""","assets":[{"name":"openride-$infix-$versionCode.apk","browser_download_url":"$apkUrl"}]}""")
     }
 
     @Test
-    fun `a higher versionCode is an available update`() {
-        val result = checker.evaluate(currentVersionCode = 1, manifestJson = manifestJson(versionCode = 2))
+    fun `a higher versionCode in the asset filename is an available update`() {
+        val result = checker.evaluate(currentVersionCode = 1, assetInfix = "real", releaseJson = releaseJson(versionCode = 2))
 
         assertTrue(result is UpdateCheckResult.Available)
-        val manifest = (result as UpdateCheckResult.Available).manifest
-        assertEquals(2, manifest.versionCode)
-        assertEquals("0.2.0", manifest.versionName)
-        assertEquals("https://example.com/openride.apk", manifest.apkUrl)
-        assertEquals("Adds routes", manifest.notes)
+        val update = (result as UpdateCheckResult.Available).update
+        assertEquals(2, update.versionCode)
+        assertEquals("0.2.0", update.versionName)
+        assertEquals(
+            "https://github.com/o/r/releases/download/v0.2.0/openride-real-2.apk",
+            update.apkUrl,
+        )
+        assertEquals("Adds routes", update.notes)
     }
 
     @Test
     fun `an equal versionCode is up to date`() {
-        val result = checker.evaluate(currentVersionCode = 2, manifestJson = manifestJson(versionCode = 2))
+        val result = checker.evaluate(currentVersionCode = 2, assetInfix = "real", releaseJson = releaseJson(versionCode = 2))
 
         assertEquals(UpdateCheckResult.UpToDate(2), result)
     }
 
     @Test
     fun `a lower versionCode is up to date, never a downgrade offer`() {
-        val result = checker.evaluate(currentVersionCode = 5, manifestJson = manifestJson(versionCode = 3))
+        val result = checker.evaluate(currentVersionCode = 5, assetInfix = "real", releaseJson = releaseJson(versionCode = 3))
 
         assertEquals(UpdateCheckResult.UpToDate(5), result)
     }
 
     @Test
-    fun `versionName is not used for ordering`() {
-        // Older-looking name but a higher code — the code wins.
+    fun `the version name comes from the tag with a leading v stripped`() {
         val result = checker.evaluate(
             currentVersionCode = 1,
-            manifestJson = manifestJson(versionCode = 2, versionName = "0.0.9"),
+            assetInfix = "real",
+            releaseJson = releaseJson(versionCode = 9, tag = "v1.4.2"),
         )
 
         assertTrue(result is UpdateCheckResult.Available)
+        assertEquals("1.4.2", (result as UpdateCheckResult.Available).update.versionName)
     }
 
     @Test
-    fun `a non-https apkUrl is rejected`() {
-        val result = checker.evaluate(
-            currentVersionCode = 1,
-            manifestJson = manifestJson(apkUrl = "http://example.com/openride.apk"),
+    fun `only the asset matching the build's infix is considered`() {
+        // A release carrying both a mock and a real APK; the mock build must pick the mock one.
+        val json = """
+            {"tag_name":"v0.3.0","assets":[
+              {"name":"openride-real-4.apk","browser_download_url":"https://github.com/o/r/openride-real-4.apk"},
+              {"name":"openride-mock-4.apk","browser_download_url":"https://github.com/o/r/openride-mock-4.apk"}
+            ]}
+        """.trimIndent()
+
+        val result = checker.evaluate(currentVersionCode = 1, assetInfix = "mock", releaseJson = json)
+
+        assertTrue(result is UpdateCheckResult.Available)
+        assertEquals(
+            "https://github.com/o/r/openride-mock-4.apk",
+            (result as UpdateCheckResult.Available).update.apkUrl,
         )
-
-        assertEquals(UpdateCheckResult.Failed("Update download URL must be https"), result)
     }
 
     @Test
-    fun `a file scheme apkUrl is rejected`() {
+    fun `no asset matching the infix fails gracefully`() {
+        // Only a real asset published; a mock build finds nothing to install.
+        val result = checker.evaluate(currentVersionCode = 1, assetInfix = "mock", releaseJson = releaseJson(infix = "real"))
+
+        assertEquals(UpdateCheckResult.Failed("No matching build in the latest release"), result)
+    }
+
+    @Test
+    fun `a non-https download URL is rejected`() {
         val result = checker.evaluate(
             currentVersionCode = 1,
-            manifestJson = manifestJson(apkUrl = "file:///sdcard/evil.apk"),
+            assetInfix = "real",
+            releaseJson = releaseJson(apkUrl = "http://github.com/o/r/openride-real-2.apk"),
         )
 
         assertEquals(UpdateCheckResult.Failed("Update download URL must be https"), result)
@@ -82,34 +110,29 @@ class UpdateCheckerTest {
 
     @Test
     fun `malformed JSON fails gracefully`() {
-        val result = checker.evaluate(currentVersionCode = 1, manifestJson = "not json at all")
+        val result = checker.evaluate(currentVersionCode = 1, assetInfix = "real", releaseJson = "not json at all")
 
-        assertEquals(UpdateCheckResult.Failed("Couldn't read the update manifest"), result)
+        assertEquals(UpdateCheckResult.Failed("Couldn't read the latest release"), result)
     }
 
     @Test
-    fun `JSON missing a required field fails gracefully`() {
-        val result = checker.evaluate(currentVersionCode = 1, manifestJson = """{"versionCode":3}""")
-
-        assertEquals(UpdateCheckResult.Failed("Couldn't read the update manifest"), result)
-    }
-
-    @Test
-    fun `unknown extra fields are tolerated`() {
+    fun `unknown extra fields in the release payload are tolerated`() {
         val json = """
-            {"versionCode":9,"versionName":"1.0","apkUrl":"https://example.com/a.apk","future":"x"}
+            {"tag_name":"v1.0","id":42,"draft":false,"assets":[
+              {"name":"openride-real-9.apk","browser_download_url":"https://github.com/o/r/a.apk","size":123}
+            ]}
         """.trimIndent()
 
-        val result = checker.evaluate(currentVersionCode = 1, manifestJson = json)
+        val result = checker.evaluate(currentVersionCode = 1, assetInfix = "real", releaseJson = json)
 
         assertTrue(result is UpdateCheckResult.Available)
     }
 
     @Test
     fun `notes are optional`() {
-        val result = checker.evaluate(currentVersionCode = 1, manifestJson = manifestJson(notes = null))
+        val result = checker.evaluate(currentVersionCode = 1, assetInfix = "real", releaseJson = releaseJson(body = null))
 
         assertTrue(result is UpdateCheckResult.Available)
-        assertEquals(null, (result as UpdateCheckResult.Available).manifest.notes)
+        assertEquals(null, (result as UpdateCheckResult.Available).update.notes)
     }
 }

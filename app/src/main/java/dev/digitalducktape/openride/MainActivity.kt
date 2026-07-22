@@ -41,6 +41,15 @@ class MainActivity : ComponentActivity() {
         // app update or reinstall never silently loses profiles and ride history.
         appContainer.autoBackupManager.start()
 
+        // PRD #22/T22: best-effort check for a newer GitHub release on launch. Silent on any
+        // failure; if one is found the Home screen shows a dismissible banner. Never installs.
+        lifecycleScope.launch {
+            appContainer.refreshUpdateAvailability(
+                BuildConfig.VERSION_CODE,
+                BuildConfig.UPDATE_APK_ASSET_INFIX,
+            )
+        }
+
         // PRD P1-4, T17: eagerly construct (the container property is `by lazy`) so the
         // heart-rate manager starts observing the active profile's paired strap from launch,
         // rather than only whenever a screen happens to reference it first.

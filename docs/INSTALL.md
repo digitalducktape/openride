@@ -118,41 +118,46 @@ To fully back out of everything above, roughly in reverse order:
 Reverting network-level OTA blocks and any OpenPelo-side launcher/app removal is outside this
 app's scope — those are OpenPelo setup steps, not something OpenRide's own APK controls.
 
-## In-app updates (T22 / #22) — optional
+## In-app updates (T22 / #22)
 
-Once OpenRide is on the tablet, you can let it update itself instead of re-running `adb install`
-every time. This is **opt-in and off by default**: no update endpoint is baked into the app, so
-with nothing configured it never contacts anything.
+Once OpenRide is on the tablet, it updates itself from this repository's **GitHub Releases**
+instead of you re-running `adb install` every time. There is nothing to configure — the app
+checks the latest release on launch, and you can also check manually from **Profile tab → App
+updates**. (Because the check hits GitHub's public API unauthenticated, the repository must stay
+**public**.)
 
-To set it up, publish a small JSON manifest somewhere over **https** (a GitHub release asset, a
-gist, any static host) describing the current build:
+### Publishing a release
 
-```json
-{
-  "versionCode": 2,
-  "versionName": "0.2.0",
-  "apkUrl": "https://example.com/openride-0.2.0.apk",
-  "notes": "Adds GPX routes"
-}
-```
+1. Bump `versionCode` (and `versionName`) in `app/build.gradle.kts`, commit, and tag.
+2. Build the bike APK: `./gradlew :app:assembleDebugReal`.
+3. Create a GitHub release for the tag and attach the APK **named exactly**
+   `openride-real-<versionCode>.apk` — e.g. `openride-real-2.apk`. Put the changelog in the
+   release body; it's shown to the rider before they update.
 
-Then in OpenRide: **Profile tab → App updates**, paste the manifest URL, **Save URL**, and tap
-**Check for updates**. If `versionCode` is higher than the installed build's, you get a
-**Download** button, and once that finishes an **Install** button that hands the APK to Android's
-own package installer.
+That filename is the whole contract: the trailing integer is the version the app compares
+against, so there's no separate manifest to maintain.
+
+### What the rider sees
+
+On the next launch, if the latest release's `versionCode` is higher than what's installed, Home
+shows a dismissible **"OpenRide `<version>` is available"** banner. Tapping **Update** (or going
+to **Profile → App updates → Check for updates**) reveals a **Download** button, and once that
+finishes an **Install** button that hands the APK to Android's own package installer.
 
 Notes:
 
-- `versionCode` is the only thing compared — `versionName` is for humans and is never used for
-  ordering. Bump `versionCode` in `app/build.gradle.kts` for each build you publish.
-- `apkUrl` **must** be `https://`; a plaintext or `file://` URL is rejected rather than
-  downloaded, since the payload is something you're about to be asked to install.
+- The `<versionCode>` in the asset filename is the only thing compared — the release tag/name is
+  display-only and never used for ordering.
+- The asset's download URL **must** be `https://` (GitHub's are); a non-https URL is rejected
+  rather than downloaded, since the payload is something you're about to be asked to install.
 - Nothing installs itself. Check, Download and Install are three separate taps, and the last one
   just opens the platform installer's own confirmation screen.
 - The first install this way will prompt you to allow OpenRide to "install unknown apps"
   (Android's `REQUEST_INSTALL_PACKAGES` gate) — a one-time per-app system setting.
 - The published APK must be signed with the **same key** as the installed build or Android will
   refuse the update; if you're sideloading debug builds, keep using the same debug keystore.
+- The dev (mock-sensor) build looks for an `openride-mock-<versionCode>.apk` asset, which normal
+  releases don't carry, so it simply never finds an update — the updater targets the bike build.
 
 ## Bluetooth headphones (T19 / P1-9)
 

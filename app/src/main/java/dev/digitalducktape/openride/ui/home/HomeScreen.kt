@@ -15,6 +15,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -41,6 +42,9 @@ fun HomeScreen(
     onQuickStart: () -> Unit,
     onOpenProfile: () -> Unit,
     modifier: Modifier = Modifier,
+    updateVersionName: String? = null,
+    onOpenUpdate: () -> Unit = {},
+    onDismissUpdate: () -> Unit = {},
 ) {
     val activeProfile by viewModel.activeProfile.collectAsState(initial = null)
     val goal by viewModel.goal.collectAsState()
@@ -48,6 +52,17 @@ fun HomeScreen(
 
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(modifier = Modifier.fillMaxSize().padding(horizontal = 48.dp, vertical = 36.dp)) {
+            // PRD #22/T22: launch-time update check surfaces here as a dismissible banner that
+            // taps through to the App updates screen. Nothing installs without an explicit tap.
+            if (updateVersionName != null) {
+                UpdateBanner(
+                    versionName = updateVersionName,
+                    onUpdate = onOpenUpdate,
+                    onDismiss = onDismissUpdate,
+                    modifier = Modifier.padding(bottom = 24.dp),
+                )
+            }
+
             // Bike-app-style header: greeting on the left, the rider's avatar chip on the
             // right (v2 redesign spec).
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -144,5 +159,47 @@ fun HomeScreen(
                 showGoalDialog = false
             },
         )
+    }
+}
+
+/**
+ * Non-blocking "an update is available" banner (PRD #22/T22). "Update" opens the App updates
+ * screen (the actual download/install still happens there, behind explicit taps); "Dismiss"
+ * hides it for this session.
+ */
+@Composable
+private fun UpdateBanner(
+    versionName: String,
+    onUpdate: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(
+                color = MaterialTheme.colorScheme.primaryContainer,
+                shape = RoundedCornerShape(16.dp),
+            )
+            .padding(horizontal = 24.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "OpenRide $versionName is available",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            modifier = Modifier.weight(1f),
+        )
+        TextButton(onClick = onDismiss) {
+            Text("Dismiss", color = MaterialTheme.colorScheme.onPrimaryContainer)
+        }
+        Button(
+            onClick = onUpdate,
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+            modifier = Modifier.padding(start = 8.dp),
+        ) {
+            Text("Update", fontWeight = FontWeight.Bold)
+        }
     }
 }

@@ -25,14 +25,18 @@ import dev.digitalducktape.openride.core.profile.ActiveProfileHolder
 import dev.digitalducktape.openride.core.profile.AvatarPhotoStore
 import dev.digitalducktape.openride.core.ride.RideSessionManager
 import dev.digitalducktape.openride.core.route.RouteHolder
+import dev.digitalducktape.openride.core.update.AvailableUpdate
+import dev.digitalducktape.openride.core.update.UpdateCheckResult
 import dev.digitalducktape.openride.core.update.UpdateRepository
-import dev.digitalducktape.openride.core.update.UpdateSettings
 import dev.digitalducktape.openride.core.sensor.BikeDataSource
 import dev.digitalducktape.openride.core.sensor.MockBikeDataSource
 import dev.digitalducktape.openride.core.sensor.PelotonBikeDataSource
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 
 /**
@@ -159,14 +163,36 @@ class AppContainer(private val applicationContext: Context) {
         RouteHolder()
     }
 
-    /** User-configured update manifest URL for the opt-in self-updater (PRD #22/T22). */
-    val updateSettings: UpdateSettings by lazy {
-        UpdateSettings(applicationContext)
-    }
-
-    /** Fetch/download side of the opt-in self-updater (PRD #22/T22). */
+    /** Fetch/download side of the GitHub-native self-updater (PRD #22/T22). */
     val updateRepository: UpdateRepository by lazy {
         UpdateRepository(applicationContext)
+    }
+
+    private val _updateAvailability = MutableStateFlow<AvailableUpdate?>(null)
+
+    /** The newer release found by the last launch check, or null if none / not yet checked. */
+    val updateAvailability: StateFlow<AvailableUpdate?> = _updateAvailability.asStateFlow()
+
+    private val _updateBannerDismissed = MutableStateFlow(false)
+
+    /** Whether the rider dismissed the Home update banner this session (resets on relaunch). */
+    val updateBannerDismissed: StateFlow<Boolean> = _updateBannerDismissed.asStateFlow()
+
+    /** Hides the Home update banner until the next launch (the update stays reachable via Profile). */
+    fun dismissUpdateBanner() {
+        _updateBannerDismissed.value = true
+    }
+
+    /**
+     * Best-effort launch check (PRD #22/T22): asks GitHub for the latest release and, if it's
+     * newer, publishes it to [updateAvailability] for the Home banner. Silent on any failure —
+     * a launch must never be blocked or interrupted by the updater. Call from [MainActivity].
+     */
+    suspend fun refreshUpdateAvailability(currentVersionCode: Int, assetInfix: String) {
+        val result = updateRepository.check(currentVersionCode, assetInfix)
+        if (result is UpdateCheckResult.Available) {
+            _updateAvailability.value = result.update
+        }
     }
 }
 
