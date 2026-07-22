@@ -27,36 +27,41 @@ It's installed using a free tool called [OpenPelo](https://github.com/doudar/Ope
 
 ## Getting the app
 
-OpenRide isn't available in an app store — you build it from this repo and install it onto the bike's tablet yourself. This does take a little technical setup, but the steps below walk through everything.
+OpenRide isn't available in an app store — you install it onto the bike's tablet yourself, either by downloading a ready-built APK from GitHub or by building it from this repo. This does take a little technical setup, but the steps below walk through everything.
 
 ### What you'll need
 
 - A Peloton Bike (Gen 2), with [OpenPelo](https://github.com/doudar/Openpelo) already set up on it. OpenPelo is what gives your computer the ability to talk to the bike's tablet — set that up first, following its own instructions.
-- A computer with `adb` installed (this is Android's device-connection tool, part of the free "Android SDK platform-tools" download) and Java 21 installed.
-- A copy of this repo on your computer (`git clone`, or download it as a ZIP from GitHub and unzip it).
+- A computer with `adb` installed (this is Android's device-connection tool, part of the free "Android SDK platform-tools" download).
 
-### Step 1: Build the app
+### Step 1: Get the APK
 
-Open a terminal in the folder where you downloaded this repo, and run:
+**Option A — download it (recommended):** grab the latest `openride-real-*.apk` from the [Releases page](https://github.com/digitalducktape/openride/releases/latest) and save it somewhere on your computer.
+
+**Option B — build it yourself:** if you'd rather build from source, you'll also need Java 21 and a copy of this repo (`git clone`, or download it as a ZIP from GitHub and unzip it). Then, in a terminal opened to that folder:
 
 ```sh
-./gradlew assembleDebug
+./gradlew :app:assembleDebugReal
 ```
 
-This compiles OpenRide into an installable file, which will show up at `app/build/outputs/apk/debug/app-debug.apk`.
+This compiles OpenRide into an installable file at `app/build/outputs/apk/debugReal/app-debugReal.apk`.
 
 ### Step 2: Install it on the bike
 
-Connect to the bike's tablet with `adb` (per OpenPelo's instructions), then run:
+Connect to the bike's tablet with `adb` (per OpenPelo's instructions), then run (substituting whichever APK path you ended up with above):
 
 ```sh
-adb install -r app/build/outputs/apk/debug/app-debug.apk
-adb shell am start -n dev.digitalducktape.openride/.MainActivity
+adb install -r app-debugReal.apk
+adb shell am start -n dev.digitalducktape.openride.real/dev.digitalducktape.openride.MainActivity
 ```
 
 The app should open to a profile selection screen — you're in.
 
 From here, making OpenRide the screen that greets you when the bike turns on, and making sure a software update doesn't undo any of this, are covered step-by-step in **[docs/INSTALL.md](docs/INSTALL.md)**. Please read it in full before going further — the order of steps there matters.
+
+### Staying up to date
+
+Once it's installed, OpenRide checks this repo's [Releases](https://github.com/digitalducktape/openride/releases) on its own each time it launches, and shows a banner on the Home screen when a newer build is available — tap it (or go to **Profile → App updates**) to download and install, no `adb` required. See [docs/INSTALL.md](docs/INSTALL.md#in-app-updates-t22--22) for details.
 
 ## For developers
 
